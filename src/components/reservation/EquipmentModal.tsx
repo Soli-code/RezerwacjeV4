@@ -1,116 +1,218 @@
-import React from 'react';
-import { X, Package } from 'lucide-react';
-import { Equipment } from '../../lib/equipment';
+import React, { useEffect, useRef } from 'react';
+import { X, ShoppingCart, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface Equipment {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  deposit: number;
+  image: string;
+  categories: string[];
+  quantity: number;
+}
 
 interface EquipmentModalProps {
   equipment: Equipment | null;
   onClose: () => void;
-  onAddToCart: (item: Equipment) => void;
-  onRemoveFromCart: (id: string) => void;
+  onAddToCart: (equipment: Equipment) => void;
   isInCart: boolean;
+  onRemoveFromCart: (id: string) => void;
 }
 
-const EquipmentModal: React.FC<EquipmentModalProps> = ({
-  equipment,
-  onClose,
+const EquipmentModal: React.FC<EquipmentModalProps> = ({ 
+  equipment, 
+  onClose, 
   onAddToCart,
-  onRemoveFromCart,
-  isInCart
+  isInCart,
+  onRemoveFromCart
 }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (modalRef.current && contentRef.current) {
+      const updateMaxHeight = () => {
+        const viewportHeight = window.innerHeight;
+        const modalTop = modalRef.current?.getBoundingClientRect().top || 0;
+        const maxHeight = viewportHeight - modalTop - 40; // 40px for padding
+        contentRef.current!.style.maxHeight = `${maxHeight}px`;
+      };
+
+      updateMaxHeight();
+      window.addEventListener('resize', updateMaxHeight);
+      return () => window.removeEventListener('resize', updateMaxHeight);
+    }
+  }, []);
+
   if (!equipment) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-semibold text-gray-800">{equipment.name}</h2>
-          <button 
-            onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-100"
+    <div className="fixed inset-0 modal-overlay flex items-center justify-center bg-black bg-opacity-75">
+      <AnimatePresence>
+        <motion.div
+          ref={modalRef}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+          className="bg-white w-[90%] max-h-[90vh] md:w-full md:h-auto rounded-lg shadow-xl md:max-w-5xl overflow-hidden relative mx-auto my-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
+          {/* Header */}
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b bg-white">
+            <h2 id="modal-title" className="text-xl md:text-2xl font-semibold text-gray-900">
+              {equipment.name}
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-1.5 md:p-2 hover:bg-gray-100 rounded-full transition-colors active:bg-gray-200"
+              aria-label="Zamknij"
+            >
+              <X className="w-5 h-5 md:w-6 md:h-6 text-gray-500" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div
+            ref={contentRef}
+            className="overflow-y-auto max-h-[calc(90vh-4rem)] md:h-auto"
+            style={{ scrollbarGutter: 'stable' }}
           >
-            <X className="w-6 h-6 text-gray-500" />
-          </button>
-        </div>
-        
-        <div className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="w-full md:w-1/3 flex justify-center">
-              <img 
-                src={equipment.image} 
-                alt={equipment.name} 
-                className="w-full max-w-[250px] object-contain"
-                onError={(e) => {
-                  console.error(`Błąd ładowania obrazu w modalu: ${equipment.image}`);
-                  e.currentTarget.src = '/assets/placeholder.png'; // Zastępczy obraz
-                }}
-              />
-            </div>
-            
-            <div className="w-full md:w-2/3">
-              <p className="text-gray-700 mb-4">{equipment.description}</p>
-              
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <h3 className="font-medium text-gray-900">Cena</h3>
-                  <p className="text-solrent-orange font-bold">{equipment.price} zł/dzień</p>
-                  {equipment.promotional_price && (
-                    <p className="text-green-600 text-sm">od 7 dni: {equipment.promotional_price} zł/dzień</p>
-                  )}
-                </div>
-                
-                <div>
-                  <h3 className="font-medium text-gray-900">Kaucja</h3>
-                  <p className="text-gray-700">{equipment.deposit || 0} zł</p>
+            <div className="flex flex-col md:flex-row md:divide-x divide-gray-200">
+              {/* Image Section */}
+              <div className="md:w-1/2 p-3 md:p-6">
+                <div className="bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center h-[200px] md:h-[300px]">
+                  <img
+                    src={equipment.image}
+                    alt={equipment.name}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                  />
                 </div>
               </div>
-              
-              {equipment.specifications && equipment.specifications.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-medium text-gray-900 mb-2">Specyfikacja</h3>
-                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {equipment.specifications.map(spec => (
-                      <li key={spec.id} className="flex items-start">
-                        <span className="font-medium mr-2">{spec.key}:</span>
-                        <span>{spec.value}</span>
-                      </li>
-                    ))}
-                  </ul>
+
+              {/* Details Section */}
+              <div className="md:w-1/2 p-3 md:p-6">
+                <div className="space-y-8">
+                  {/* Price and Availability */}
+                  <div className="bg-gray-50 p-4 md:p-6 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="text-xl md:text-2xl font-semibold text-solrent-orange">
+                          {equipment.price} zł/dzień
+                          {equipment.promotional_price && (
+                            <div className="text-sm text-green-600 font-medium mt-1">
+                              od 7 dni: {equipment.promotional_price} zł/dzień
+                            </div>
+                          )}
+                        </div>
+                        {equipment.deposit > 0 && (
+                          <p className="text-sm text-orange-600 mt-2">
+                            Kaucja: {equipment.deposit} zł
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600 mb-1">
+                          Dostępność:
+                        </p>
+                        <p className="font-medium text-green-600 text-lg">
+                          {equipment.quantity} szt.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Add to Cart Button */}
+                  <button
+                    onClick={() => {
+                      if (isInCart && equipment) {
+                        onRemoveFromCart(equipment.id);
+                      } else if (equipment) {
+                        onAddToCart({
+                          ...equipment,
+                          quantity: 1
+                        });
+                      }
+                      onClose();
+                    }}
+                    className={`sticky bottom-0 left-0 right-0 w-full py-4 md:py-3 px-4 transition-colors flex items-center justify-center gap-2 md:rounded-lg shadow-lg md:shadow-none ${
+                      isInCart 
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-solrent-orange hover:bg-orange-700 text-white'
+                    }`}
+                  >
+                    {isInCart ? (
+                      <>
+                        <Trash2 className="w-5 h-5" />
+                        Usuń z koszyka
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="w-5 h-5" />
+                        Dodaj do koszyka
+                      </>
+                    )}
+                  </button>
+
+                  {/* Description */}
+                  <div className="text-sm md:text-base">
+                    <h3 className="text-lg md:text-xl font-medium text-gray-900 mb-3 md:mb-4">
+                      Opis
+                    </h3>
+                    <div className="prose prose-sm max-w-none text-gray-600 leading-relaxed">
+                      {equipment.description.split('\n').map((paragraph, index) => (
+                        <p key={index} className="mb-4">{paragraph}</p>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Categories */}
+                  <div className="text-sm md:text-base">
+                    <h3 className="text-lg md:text-xl font-medium text-gray-900 mb-3 md:mb-4">
+                      Kategorie
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {equipment.categories.map((category, index) => (
+                        <span
+                          key={index}
+                          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium"
+                        >
+                          {category === 'budowlany' ? 'Sprzęt budowlany' : 'Sprzęt ogrodniczy'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              )}
-              
-              {equipment.features && equipment.features.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="font-medium text-gray-900 mb-2">Cechy</h3>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {equipment.features.map(feature => (
-                      <li key={feature.id}>{feature.text}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              </div>
             </div>
           </div>
-        </div>
-        
-        <div className="p-4 border-t flex justify-end">
-          {isInCart ? (
-            <button
-              onClick={() => onRemoveFromCart(equipment.id)}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Usuń z koszyka
-            </button>
-          ) : (
-            <button
-              onClick={() => onAddToCart(equipment)}
-              className="px-4 py-2 bg-solrent-orange text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-2"
-            >
-              <Package className="w-4 h-4" />
-              Dodaj do koszyka
-            </button>
-          )}
-        </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 };

@@ -81,7 +81,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
       conflictingReservations.forEach(reservation => {
         const endDate = new Date(reservation.end_date);
         reservedEquipment.push(
-          `${reservation.equipment_name} - zarezerwowany do: ${formatDateTime(endDate)}`
+          `${reservation.equipment_name || item.name} - zarezerwowany do: ${formatDateTime(endDate)}`
         );
       });
     });
@@ -127,8 +127,17 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
             if (isReserved) {
               const nextDate = await getNextAvailableDate(item.id, testDate);
+              const reservedItem = itemReservations.find(reservation => {
+                const reservationStart = new Date(reservation.start_date);
+                const reservationEnd = new Date(reservation.end_date);
+                reservationStart.setHours(0, 0, 0, 0);
+                reservationEnd.setHours(23, 59, 59, 999);
+                return testDate >= reservationStart && testDate <= reservationEnd;
+              });
+              
+              const itemName = reservedItem?.equipment_name || item.name;
               unavailableDatesMap.set(dateKey,
-                `${item.name} jest zarezerwowany do: ${formatDateTime(nextDate)}`
+                `${itemName} jest zarezerwowany do: ${formatDateTime(nextDate)}`
               );
               break;
             }
@@ -563,12 +572,13 @@ const DatePicker: React.FC<DatePickerProps> = ({
           <h2 className="text-xl font-semibold text-gray-800">{getStepTitle()}</h2>
           {(startDate || endDate) && (
             <button
-              onClick={handleReset}
-              className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              <RotateCcw className="w-4 h-4 mr-1.5" />
-              Resetuj datę
-            </button>
+  onClick={handleReset}
+  className="flex items-center px-3 py-1.5 text-sm font-medium text-white bg-red-500 rounded-lg"
+>
+  <RotateCcw className="w-4 h-4 mr-1.5" />
+  Resetuj datę
+</button>
+
           )}
         </div>
 

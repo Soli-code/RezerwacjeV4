@@ -113,6 +113,65 @@ interface CustomerUpdateData {
   postal_code?: string;
 }
 
+// Aktualizacja interfejsu dla editedDetails
+interface EditedDetails {
+  start_date: string;
+  end_date: string;
+  start_time: string;
+  end_time: string;
+  status?: string;
+}
+
+// Dodajmy funkcję pomocniczą do obsługi połączeń z Supabase z retry
+const supabaseRequestWithRetry = async <T,>(requestFn: () => Promise<T>, maxRetries = 2, retryDelay = 1000): Promise<T> => {
+  let lastError = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      console.warn(`Próba ${attempt + 1}/${maxRetries + 1} nie powiodła się:`, error);
+      lastError = error;
+      
+      // Jeśli to nie jest ostatnia próba, poczekaj przed kolejną
+      if (attempt < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  
+  // Wszystkie próby nie powiodły się
+  throw lastError;
+};
+
+// Funkcja do sprawdzania połączenia
+const checkSupabaseConnection = async () => {
+  try {
+    // Ustaw timeout 5 sekund dla zapytania
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    // Proste zapytanie do sprawdzenia połączenia
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id')
+      .limit(1)
+      .abortSignal(controller.signal);
+      
+    clearTimeout(timeoutId);
+    
+    if (error) {
+      console.error('Błąd połączenia z Supabase:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Wyjątek podczas sprawdzania połączenia:', error);
+    return false;
+  }
+};
+
 const CustomerDetailsView: React.FC = (): JSX.Element => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -162,12 +221,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }
   ]);
   const [editMode, setEditMode] = useState(false);
-  const [editedDetails, setEditedDetails] = useState<{
-    start_date: string;
-    end_date: string;
-    start_time: string;
-    end_time: string;
-  }>({
+  const [editedDetails, setEditedDetails] = useState<EditedDetails>({
     start_date: '',
     end_date: '',
     start_time: '08:00',
@@ -262,6 +316,9 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
   });
 
   const [isCompanyCustomer, setIsCompanyCustomer] = useState(false);
+
+  // Na początku komponentu dodaję zmienną stanu dla komunikatu sukcesu
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   useEffect(() => {
     loadCustomerDetails();
@@ -573,14 +630,111 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
 
   const loadCustomerDetails = async () => {
     try {
+      // Próba pobrania danych z widoku admin_reservations_view
       const { data, error } = await supabase
         .from('admin_reservations_view')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (error) throw error;
-      setDetails(data);
+      if (!error && data) {
+        setDetails(data);
+        setLoading(false);
+        return;
+      }
+
+      // Jeśli widok nie istnieje, pobierz dane bezpośrednio z tabeli rezerwacji
+      console.error('Error loading from view, trying direct tables:', error);
+      
+      const { data: reservationData, error: reservationError } = await supabase
+        .from('reservations')
+        .select(`
+          id,
+          status,
+          start_date,
+          end_date,
+          start_time,
+          end_time,
+          total_price,
+          customers (
+            id,
+            first_name,
+            last_name,
+            email,
+            phone,
+            company_name,
+            company_nip,
+            street,
+            city,
+            postal_code
+          ),
+          reservation_items (
+            id,
+            equipment_id,
+            equipment:equipment (
+              id,
+              name,
+              price_per_day,
+              deposit
+            ),
+            quantity
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (reservationError) {
+        console.error('Error loading reservation details:', reservationError);
+        setError('Nie udało się załadować szczegółów rezerwacji');
+        setLoading(false);
+        return;
+      }
+
+      if (reservationData) {
+        // Użycie any do ominięcia problemów typowania z Supabase
+        const resData: any = reservationData;
+        const customerData = resData.customers || {};
+        
+        const formattedDetails: CustomerDetails = {
+          id: resData.id,
+          status: resData.status || 'pending',
+          start_date: resData.start_date,
+          end_date: resData.end_date,
+          total_price: resData.total_price || 0,
+          customer: {
+            id: customerData.id || '',
+            first_name: customerData.first_name || '',
+            last_name: customerData.last_name || '',
+            email: customerData.email || '',
+            phone: customerData.phone || '',
+            company_name: customerData.company_name || '',
+            company_nip: customerData.company_nip || '',
+            street: customerData.street || '',
+            city: customerData.city || '',
+            postal_code: customerData.postal_code || ''
+          },
+          items: Array.isArray(resData.reservation_items) 
+            ? resData.reservation_items.map((item: any) => ({
+                id: item.id,
+                equipment_name: item.equipment?.name || 'Nieznany sprzęt',
+                quantity: item.quantity || 1,
+                price_per_day: item.equipment?.price_per_day || 0,
+                deposit: item.equipment?.deposit || 0
+              }))
+            : [],
+          // Puste wartości dla pól, które normalnie pochodziłyby z widoku
+          history: [],
+          reservation: {
+            id: resData.id,
+            start_date: resData.start_date,
+            end_date: resData.end_date,
+            start_time: resData.start_time || '08:00',
+            end_time: resData.end_time || '18:00'
+          }
+        };
+
+        setDetails(formattedDetails);
+      }
     } catch (err) {
       console.error('Error loading customer details:', err);
       setError('Nie udało się załadować szczegółów klienta');
@@ -648,8 +802,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
   };
 
   const handleSaveChanges = async () => {
-    if (!editedDetails.start_date || !editedDetails.end_date) {
-      alert('Proszę wypełnić wszystkie wymagane pola');
+    if (!details || !editMode) {
       return;
     }
     
@@ -679,6 +832,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }
     
     setSubmitting(true);
+    let hasErrors = false;
     
     try {
       // Sprawdź, czy id rezerwacji jest poprawne
@@ -702,174 +856,199 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
       
       // Sprawdź, czy daty są poprawne
       if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        alert('Niepoprawny format daty. Proszę sprawdzić format daty i godziny.');
+        alert('Nieprawidłowy format daty lub godziny');
+        console.error('Nieprawidłowe daty:', editedDetails);
         return;
       }
       
-      console.log('Aktualizacja rezerwacji:', {
-        id,
-        start_date: startDateTime.toISOString(),
-        end_date: endDateTime.toISOString()
-      });
-      
-      // Aktualizacja rezerwacji
+      // KROK 1: Aktualizacja danych rezerwacji
+      let updateSuccess = true;
       try {
-        const { error: reservationError } = await supabase
-          .from('reservations')
-          .update({
-            start_date: editedDetails.start_date,
-            end_date: editedDetails.end_date,
-            start_time: editedDetails.start_time,
-            end_time: editedDetails.end_time
-          })
-          .eq('id', details?.reservation.id);
-
-        if (reservationError) {
-          console.error('Błąd aktualizacji rezerwacji:', reservationError);
-          alert(`Błąd podczas aktualizacji terminu rezerwacji: ${reservationError.message}`);
-          return;
-        }
-
-        // Aktualizuj stan details, aby od razu pokazać zmiany
-        if (details) {
-          setDetails({
-            ...details,
-            reservation: {
-              ...details.reservation,
+        const result = await supabaseRequestWithRetry(async () => {
+          return await supabase
+            .from('reservations')
+            .update({
               start_date: editedDetails.start_date,
               end_date: editedDetails.end_date,
               start_time: editedDetails.start_time,
-              end_time: editedDetails.end_time
-            }
-          });
+              end_time: editedDetails.end_time,
+              status: editedDetails.status || (details ? details.status : 'pending')
+            })
+            .eq('id', id);
+        });
+        
+        if (result.error) {
+          console.error('Błąd aktualizacji rezerwacji:', result.error);
+          alert(`Nie udało się zaktualizować rezerwacji: ${result.error.message}`);
+          updateSuccess = false;
+          hasErrors = true;
         }
-
-        setEditMode(false);
-        alert('Zmiany zostały zapisane pomyślnie!');
-      } catch (error) {
-        console.error('Błąd podczas zapisywania zmian:', error);
-        alert('Wystąpił błąd podczas zapisywania zmian');
+      } catch (reservationError) {
+        console.error('Wyjątek podczas aktualizacji rezerwacji:', reservationError);
+        updateSuccess = false;
+        hasErrors = true;
       }
       
-      // Aktualizacja danych klienta
-      try {
-        const customerUpdateData: CustomerUpdateData = {
-          first_name: editedCustomer.first_name,
-          last_name: editedCustomer.last_name,
-          email: editedCustomer.email,
-          phone: editedCustomer.phone,
-        };
-
-        // Dodajemy dane firmowe tylko jeśli są włączone i dostępne w bazie
-        if (isCompanyCustomer) {
-          customerUpdateData.company_name = editedCustomer.company_name || undefined;
-          customerUpdateData.company_nip = editedCustomer.company_nip || undefined;
-          
-          // Dodajemy adres tylko jeśli pola są wypełnione
-          if (editedCustomer.street) customerUpdateData.street = editedCustomer.street;
-          if (editedCustomer.city) customerUpdateData.city = editedCustomer.city;
-          if (editedCustomer.postal_code) customerUpdateData.postal_code = editedCustomer.postal_code;
-        } else {
-          // Jeśli to klient prywatny, usuwamy dane firmowe
-          customerUpdateData.company_name = undefined;
-          customerUpdateData.company_nip = undefined;
-          customerUpdateData.street = undefined;
-          customerUpdateData.city = undefined;
-          customerUpdateData.postal_code = undefined;
-        }
-
-        const { error: customerError } = await supabase
-          .from('customers')
-          .update(customerUpdateData)
-          .eq('id', editedCustomer.id);
-          
-        if (customerError) {
-          console.error('Błąd aktualizacji klienta:', customerError);
-          alert(`Błąd podczas aktualizacji danych klienta: ${customerError.message}`);
-          return;
-        }
-
-        // Aktualizuj stan details, aby od razu pokazać zmiany
-        if (details) {
-          setDetails({
-            ...details,
-            customer: {
-              ...details.customer,
-              ...customerUpdateData
-            }
-          });
-        }
-      } catch (customerError) {
-        console.error('Błąd aktualizacji klienta:', customerError);
-        alert('Wystąpił błąd podczas aktualizacji danych klienta');
-        return;
-      }
-      
-      // Aktualizacja usług dodatkowych
-      if (additionalServices.some(service => service.quantity > 0)) {
+      // KROK 2: Aktualizacja danych klienta (niezależnie od kroku 1)
+      let customerSuccess = true;
+      if (editedCustomer.id) {
         try {
-          // Najpierw usuń istniejące usługi dodatkowe
-          const { error: deleteError } = await supabase
-            .from('reservation_additional_services')
-            .delete()
-            .eq('reservation_id', id);
-            
-          if (deleteError) {
-            console.error('Błąd usuwania usług dodatkowych:', deleteError);
-          }
+          // Przygotuj dane klienta do aktualizacji z minimalnymi polami
+          // w przypadku gdy niektóre kolumny nie istnieją
+          const customerBasicData = {
+            first_name: editedCustomer.first_name,
+            last_name: editedCustomer.last_name,
+            email: editedCustomer.email,
+            phone: editedCustomer.phone
+          };
           
-          // Dodaj nowe usługi dodatkowe
-          const servicesToAdd = additionalServices
-            .filter(service => service.quantity > 0)
-            .map(service => ({
-              reservation_id: id,
-              service_id: service.id,
-              name: service.name,
-              price: service.price,
-              quantity: service.quantity
-            }));
+          // Najpierw spróbuj zaktualizować podstawowe dane
+          const { error: basicUpdateError } = await supabase
+            .from('customers')
+            .update(customerBasicData)
+            .eq('id', editedCustomer.id);
             
-          if (servicesToAdd.length > 0) {
-            const { error: addError } = await supabase
-              .from('reservation_additional_services')
-              .insert(servicesToAdd);
+          if (basicUpdateError) {
+            console.error('Błąd aktualizacji podstawowych danych klienta:', basicUpdateError);
+            customerSuccess = false;
+            hasErrors = true;
+          } else {
+            // Podstawowa aktualizacja się powiodła, spróbuj zaktualizować dane firmowe/adresowe
+            // jako osobne zapytania, żeby w przypadku braku kolumn tylko te części się nie powiodły
+            
+            // Aktualizacja danych firmowych
+            try {
+              const companyData = {
+                company_name: editedCustomer.company_name || null,
+                company_nip: editedCustomer.company_nip || null
+              };
               
-            if (addError) {
-              console.error('Błąd dodawania usług dodatkowych:', addError);
+              const { error: companyUpdateError } = await supabase
+                .from('customers')
+                .update(companyData)
+                .eq('id', editedCustomer.id);
+                
+              if (companyUpdateError) {
+                console.warn('Błąd aktualizacji danych firmowych:', companyUpdateError);
+              }
+            } catch (companyError) {
+              console.warn('Wyjątek podczas aktualizacji danych firmowych:', companyError);
+            }
+            
+            // Aktualizacja danych adresowych
+            try {
+              const addressData = {
+                street: editedCustomer.street || null,
+                city: editedCustomer.city || null,
+                postal_code: editedCustomer.postal_code || null
+              };
+              
+              const { error: addressUpdateError } = await supabase
+                .from('customers')
+                .update(addressData)
+                .eq('id', editedCustomer.id);
+                
+              if (addressUpdateError) {
+                console.warn('Błąd aktualizacji danych adresowych (prawdopodobnie brak kolumn):', addressUpdateError);
+              }
+            } catch (addressError) {
+              console.warn('Wyjątek podczas aktualizacji danych adresowych:', addressError);
             }
           }
-        } catch (servicesError) {
-          console.error('Błąd aktualizacji usług dodatkowych:', servicesError);
+        } catch (customerError) {
+          console.error('Wyjątek podczas aktualizacji klienta:', customerError);
+          customerSuccess = false;
+          hasErrors = true;
         }
       }
       
-      // Dodaj wpis do historii rezerwacji
+      // KROK 3: Aktualizacja usług dodatkowych (niezależnie od poprzednich kroków)
+      let additionalServicesSuccess = true;
       try {
-        const { error: historyError } = await supabase
-          .from('reservation_history')
-          .insert({
-            reservation_id: id,
-            action: 'update',
-            details: 'Zaktualizowano szczegóły rezerwacji',
-            user_id: 'system' // Tutaj można dodać ID użytkownika, jeśli jest dostępne
-          });
-          
-        if (historyError) {
-          console.error('Błąd dodawania wpisu do historii:', historyError);
+        const servicesToUpdate = additionalServices.filter(s => s.quantity > 0);
+        if (servicesToUpdate.length > 0) {
+          // Sprawdź najpierw, czy tabela istnieje
+          const { error: tableCheckError } = await supabase
+            .from('reservation_additional_services')
+            .select('id')
+            .limit(1);
+            
+          // Jeśli tabela nie istnieje, po prostu pomijamy tę część
+          if (tableCheckError) {
+            console.warn('Tabela usług dodatkowych nie istnieje, pomijam aktualizację:', tableCheckError);
+          } else {
+            // Tabela istnieje, możemy kontynuować
+            for (const service of servicesToUpdate) {
+              try {
+                // Sprawdź, czy usługa już istnieje
+                const { data: existingService, error: checkError } = await supabase
+                  .from('reservation_additional_services')
+                  .select('*')
+                  .eq('reservation_id', id)
+                  .eq('service_id', service.id)
+                  .maybeSingle();
+                
+                if (checkError) {
+                  console.warn('Błąd sprawdzania usług dodatkowych:', checkError);
+                  continue;
+                }
+                
+                if (existingService) {
+                  // Aktualizuj istniejącą usługę
+                  const { error: updateError } = await supabase
+                    .from('reservation_additional_services')
+                    .update({ quantity: service.quantity })
+                    .eq('id', existingService.id);
+                    
+                  if (updateError) {
+                    console.warn('Błąd aktualizacji usługi dodatkowej:', updateError);
+                  }
+                } else {
+                  // Dodaj nową usługę
+                  const { error: insertError } = await supabase
+                    .from('reservation_additional_services')
+                    .insert({
+                      reservation_id: id,
+                      service_id: service.id,
+                      quantity: service.quantity,
+                      price: service.price
+                    });
+                    
+                  if (insertError) {
+                    console.warn('Błąd dodawania usługi dodatkowej:', insertError);
+                  }
+                }
+              } catch (serviceError) {
+                console.warn('Błąd przy aktualizacji usługi dodatkowej:', serviceError);
+              }
+            }
+          }
         }
-      } catch (historyError) {
-        console.error('Błąd dodawania wpisu do historii:', historyError);
+      } catch (additionalServicesError) {
+        console.warn('Błąd przy przetwarzaniu usług dodatkowych:', additionalServicesError);
+        additionalServicesSuccess = false;
+        // Nie ustawiamy hasErrors, bo błędy usług dodatkowych nie powinny blokować całości
       }
       
-      alert('Zmiany zostały zapisane pomyślnie!');
-      setSubmitting(false);
+      // Po zapisie odśwież dane
+      await loadCustomerDetails();
       setEditMode(false);
       
-      // Odśwież dane
-      loadCustomerDetails();
+      // Wyświetl odpowiedni komunikat
+      if (hasErrors) {
+        setSuccessMessage('Zmiany zostały częściowo zapisane. Niektóre operacje nie powiodły się.');
+      } else {
+        setSuccessMessage('Zmiany zostały zapisane pomyślnie.');
+      }
+      
+      // Ukryj komunikat po 3 sekundach
+      setTimeout(() => {
+        setSuccessMessage('');
+      }, 3000);
     } catch (error) {
       console.error('Błąd podczas zapisywania zmian:', error);
-      alert(`Wystąpił błąd podczas zapisywania zmian: ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+      alert(`Wystąpił błąd podczas zapisywania zmian: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       setSubmitting(false);
     }
   };
@@ -904,14 +1083,20 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         .eq('reservation_id', id)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading payments:', error);
+        // Cichy błąd - ustawiamy pustą tablicę zamiast rzucać wyjątek
+        setPayments([]);
+        return;
+      }
       
       if (data) {
         setPayments(data);
       }
     } catch (error) {
       console.error('Error loading payments:', error);
-      setError('Nie udało się załadować historii płatności');
+      // Cichy błąd - nie ustawiamy komunikatu błędu
+      setPayments([]);
     }
   };
   
@@ -923,7 +1108,11 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         .select('*')
         .eq('reservation_id', id);
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading additional services:', error);
+        // Cichy błąd - kontynuujemy bez zmian w usługach
+        return;
+      }
       
       if (data && data.length > 0) {
         // Aktualizacja stanu usług dodatkowych
@@ -942,7 +1131,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
       }
     } catch (error) {
       console.error('Error loading additional services:', error);
-      setError('Nie udało się załadować usług dodatkowych');
+      // Cichy błąd - nie ustawiamy komunikatu błędu
     }
   };
   
@@ -955,14 +1144,20 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         .eq('reservation_id', id)
         .order('reported_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading issues:', error);
+        // Cichy błąd - ustawiamy pustą tablicę zamiast rzucać wyjątek
+        setIssues([]);
+        return;
+      }
       
       if (data) {
         setIssues(data);
       }
     } catch (error) {
       console.error('Error loading issues:', error);
-      setError('Nie udało się załadować zgłoszeń usterek');
+      // Cichy błąd - nie ustawiamy komunikatu błędu
+      setIssues([]);
     }
   };
   

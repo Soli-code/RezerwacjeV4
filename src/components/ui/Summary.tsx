@@ -5,7 +5,23 @@ import { calculateRentalDays } from '../../lib/availability';
 import { sendTemplateEmail, emailTemplates } from '../../lib/email-utils';
 import Modal from './Modal';
 
-const Summary = forwardRef(({ reservation, onSubmit }, ref) => {
+interface Reservation {
+  startDate: Date | null;
+  endDate: Date | null;
+  startTime: string | null;
+  endTime: string | null;
+  equipment: Array<{ id: string; name: string; quantity: number; price: number; deposit?: number; promotional_price?: number }>;
+  personalInfo: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    comment: string;
+    termsAccepted: boolean;
+  };
+}
+
+const Summary = forwardRef(({ reservation, onSubmit }: { reservation: Reservation, onSubmit: () => void }, ref) => {
   const { startDate, endDate, equipment, personalInfo } = reservation;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -21,22 +37,26 @@ const Summary = forwardRef(({ reservation, onSubmit }, ref) => {
     if (!startDate || !endDate || !reservation.startTime || !reservation.endTime) {
       return 0;
     }
-    return calculateRentalDays(startDate, endDate, reservation.startTime, reservation.endTime);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const startTime = reservation.startTime || '00:00';
+    const endTime = reservation.endTime || '00:00';
+    return calculateRentalDays(start, end, startTime, endTime);
   };
 
   const calculateTotalPrice = () => {
     const days = calculateDays();
-    return equipment.reduce((total, item) => {
+    return equipment.reduce((total: number, item: { price: number; quantity: number; promotional_price?: number }) => {
       const price = days >= 7 && item.promotional_price ? item.promotional_price : item.price;
       return total + (price * item.quantity * days);
     }, 0);
   };
 
   const calculateTotalDeposit = () => {
-    return equipment.reduce((total, item) => total + ((item.deposit || 0) * item.quantity), 0);
+    return equipment.reduce((total: number, item: { deposit?: number; quantity: number }) => total + ((item.deposit || 0) * item.quantity), 0);
   };
 
-  const formatDate = (date) => {
+  const formatDate = (date: Date | null) => {
     if (!date) return '';
     return date.toLocaleDateString('pl-PL', {
       year: 'numeric',
@@ -58,10 +78,10 @@ const Summary = forwardRef(({ reservation, onSubmit }, ref) => {
     setSubmitError('');
     
     try {
-      const startDateTime = new Date(startDate);
-      const endDateTime = new Date(endDate);
-      const [startHour] = reservation.startTime.split(':').map(Number);
-      const [endHour] = reservation.endTime.split(':').map(Number);
+      const startDateTime = startDate ? new Date(startDate) : new Date();
+      const endDateTime = endDate ? new Date(endDate) : new Date();
+      const [startHour] = reservation.startTime ? reservation.startTime.split(':').map(Number) : [0];
+      const [endHour] = reservation.endTime ? reservation.endTime.split(':').map(Number) : [0];
       
       startDateTime.setHours(startHour, 0, 0, 0);
       endDateTime.setHours(endHour, 0, 0, 0);

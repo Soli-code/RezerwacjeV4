@@ -57,7 +57,12 @@ const EquipmentDetails: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadEquipmentDetails();
+    if (id) {
+      loadEquipmentDetails();
+    } else {
+      setError("Nie znaleziono identyfikatora sprzętu");
+      setIsLoading(false);
+    }
   }, [id]);
 
   const loadEquipmentDetails = async () => {
@@ -73,7 +78,30 @@ const EquipmentDetails: React.FC = () => {
 
       if (equipmentError) throw equipmentError;
 
-      // Pobierz historię wypożyczeń
+      // Pobierz elementy rezerwacji dla danego sprzętu
+      const { data: reservationItems, error: reservationItemsError } = await supabase
+        .from('reservation_items')
+        .select('reservation_id, quantity')
+        .eq('equipment_id', id);
+
+      if (reservationItemsError) throw reservationItemsError;
+
+      if (!reservationItems || reservationItems.length === 0) {
+        // Jeśli nie ma rezerwacji, zwróć podstawowe dane sprzętu bez historii
+        setDetails({
+          ...equipment,
+          total_revenue: 0,
+          payoff_percentage: 0,
+          rental_history: [],
+          monthly_revenue: []
+        });
+        setError(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Pobierz rezerwacje na podstawie reservation_id
+      const reservationIds = reservationItems.map(ri => ri.reservation_id);
       const { data: rentals, error: rentalsError } = await supabase
         .from('reservations')
         .select(`
@@ -87,7 +115,7 @@ const EquipmentDetails: React.FC = () => {
             last_name
           )
         `)
-        .eq('equipment_id', id)
+        .in('id', reservationIds)
         .order('start_date', { ascending: false });
 
       if (rentalsError) throw rentalsError;
@@ -117,12 +145,23 @@ const EquipmentDetails: React.FC = () => {
         start_date: rental.start_date,
         end_date: rental.end_date,
         total_price: rental.total_price,
-        customer_name: `${rental.customers.first_name} ${rental.customers.last_name}`,
+        customer_name: rental.customers ? `${rental.customers.first_name} ${rental.customers.last_name}` : 'Nieznany klient',
         status: rental.status
       }));
 
+      // Oblicz całkowity przychód i procent spłaty
+      const totalRevenue = rentals
+        .filter(rental => rental.status === 'completed')
+        .reduce((sum, rental) => sum + (rental.total_price || 0), 0);
+      
+      const payoffPercentage = equipment.purchase_price 
+        ? (totalRevenue / equipment.purchase_price) * 100 
+        : 0;
+
       setDetails({
         ...equipment,
+        total_revenue: totalRevenue,
+        payoff_percentage: payoffPercentage,
         rental_history: rentalHistory,
         monthly_revenue: monthlyRevenue
       });
