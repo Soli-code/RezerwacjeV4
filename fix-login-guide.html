@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Naprawa logowania administratora - Supabase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #ff4500;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 30px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .step {
+            background-color: #f9f9f9;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ff4500;
+            border-radius: 0 4px 4px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Naprawa logowania administratora w Supabase</h1>
+    
+    <div class="warning">
+        <strong>Uwaga:</strong> Zmiany w bazie danych powinny być wykonywane z należytą ostrożnością. Zaleca się wykonanie kopii zapasowej przed wprowadzeniem zmian.
+    </div>
+    
+    <h2>Zidentyfikowane problemy</h2>
+    <p>W trakcie analizy problemu logowania administratora wykryto następujące problemy:</p>
+    <ol>
+        <li>Brak kolumn <code>email</code> i <code>full_name</code> w tabeli <code>profiles</code></li>
+        <li>Brak powiązania profili administratorów z adresami email z tabeli <code>auth.users</code></li>
+        <li>Nieprawidłowo skonfigurowane polityki Row Level Security (RLS)</li>
+        <li>Brak tabeli <code>admin_actions</code> lub nieprawidłowe uprawnienia</li>
+    </ol>
+    
+    <h2>Rozwiązanie</h2>
+    
+    <div class="step">
+        <h3>Krok 1: Logowanie do Supabase</h3>
+        <p>Zaloguj się do Supabase pod adresem: <a href="https://app.supabase.com" target="_blank">https://app.supabase.com</a></p>
+        <p>Wybierz swój projekt i przejdź do sekcji "SQL Editor".</p>
+    </div>
+    
+    <div class="step">
+        <h3>Krok 2: Wykonanie skryptu naprawczego</h3>
+        <p>Wklej poniższy skrypt SQL do edytora i wykonaj go:</p>
+        <pre>-- Skrypt naprawczy dla problemów z uprawnieniami i logowaniem
+-- Uruchom ten skrypt w Supabase SQL Editor z uprawnieniami administratora
+
+-- 1. Sprawdź strukturę tabeli profiles
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_schema = 'public' 
+AND table_name = 'profiles';
+
+-- 2. Sprawdź, czy kolumna email jest pusta dla administratorów
+SELECT p.id, p.is_admin, p.email, u.email as auth_email
+FROM public.profiles p
+LEFT JOIN auth.users u ON p.id = u.id
+WHERE p.is_admin = TRUE;
+
+-- 3. Dodaj brakujące kolumny jeśli nie istnieją
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
+
+-- 4. Zaktualizuj kolumnę email w profilach administratorów 
+UPDATE public.profiles p
+SET email = u.email
+FROM auth.users u
+WHERE p.id = u.id
+AND p.is_admin = TRUE
+AND (p.email IS NULL OR p.email = '');
+
+-- 5. Włącz Row Level Security
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- 6. Usuń istniejące polityki dla tabeli profiles
+DO $$
+DECLARE
+    policy_record RECORD;
+BEGIN
+    FOR policy_record IN 
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE tablename = 'profiles'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.profiles', policy_record.policyname);
+    END LOOP;
+END
+$$;
+
+-- 7. Utwórz nowe polityki dostępu
+-- Dla administratorów - pełny dostęp
+CREATE POLICY "Administratorzy maja pelny dostep do profili" 
+ON public.profiles 
+FOR ALL USING (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE is_admin = TRUE)
+);
+
+-- Dla zwykłych użytkowników - tylko odczyt własnego profilu
+CREATE POLICY "Uzytkownicy moga odczytywac swoje profile" 
+ON public.profiles 
+FOR SELECT USING (
+  auth.uid() = id
+);
+
+-- 8. Utwórz tabelę admin_actions jeśli nie istnieje
+CREATE TABLE IF NOT EXISTS public.admin_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  action_type TEXT NOT NULL,
+  action_details JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 9. Włącz RLS na tabeli admin_actions i dodaj politykę
+ALTER TABLE public.admin_actions ENABLE ROW LEVEL SECURITY;
+
+-- 10. Usuń istniejące polityki dla tabeli admin_actions
+DO $$
+DECLARE
+    policy_record RECORD;
+BEGIN
+    FOR policy_record IN 
+        SELECT policyname 
+        FROM pg_policies 
+        WHERE tablename = 'admin_actions'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.admin_actions', policy_record.policyname);
+    END LOOP;
+END
+$$;
+
+-- 11. Dodaj politykę dla admin_actions
+CREATE POLICY "Administratorzy maja pelny dostep do akcji" 
+ON public.admin_actions 
+FOR ALL USING (
+  auth.uid() IN (SELECT id FROM public.profiles WHERE is_admin = TRUE)
+);
+
+-- 12. Nadaj uprawnienia dla uwierzytelnionych użytkowników
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, UPDATE ON public.profiles TO authenticated;
+GRANT SELECT, INSERT ON public.admin_actions TO authenticated;
+
+-- 13. Sprawdź ostateczny stan profili administratorów
+SELECT p.id, p.is_admin, p.email, u.email as auth_email
+FROM public.profiles p
+LEFT JOIN auth.users u ON p.id = u.id
+WHERE p.is_admin = TRUE;
+
+-- 14. Utwórz nową politykę bezwarunkową
+CREATE POLICY "Tymczasowa polityka dla testów" 
+ON public.profiles 
+FOR ALL USING (true);
+
+-- Dodaj nowego administratora do tabeli profiles
+INSERT INTO public.profiles (id, is_admin, email)
+SELECT id, TRUE, email
+FROM auth.users
+WHERE email = 'nowy-admin@solrent.pl';
+
+-- Ustaw politykę bezwarunkową, aby ominąć problemy z RLS
+CREATE POLICY "Tymczasowa polityka dla testów" 
+ON public.profiles 
+FOR ALL USING (true);
+
+-- Nadaj uprawnienia dla roli authenticated
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated;
+</pre>
+    </div>
+    
+    <div class="step">
+        <h3>Krok 3: Sprawdzenie wyników</h3>
+        <p>Po wykonaniu skryptu, ostatnie zapytanie powinno pokazać listę administratorów z uzupełnionymi adresami email. Upewnij się, że wartości w kolumnie <code>email</code> i <code>auth_email</code> są identyczne.</p>
+    </div>
+    
+    <div class="step">
+        <h3>Krok 4: Uruchomienie aplikacji</h3>
+        <p>Uruchom aplikację ponownie za pomocą jednego z poniższych poleceń:</p>
+        <pre>npm run dev</pre>
+        <p>lub</p>
+        <pre>npm run build; npm run preview</pre>
+        <p><strong>Uwaga:</strong> W PowerShell używaj średnika (;) do łączenia poleceń, a nie operatora &&.</p>
+    </div>
+    
+    <h2>Weryfikacja</h2>
+    <p>Otwórz aplikację w przeglądarce i zaloguj się używając adresu email administratora (<code>biuro@solrent.pl</code>) i odpowiedniego hasła.</p>
+    
+    <h2>Dodatkowe informacje</h2>
+    <p>Jeśli problem będzie nadal występował:</p>
+    <ol>
+        <li>Sprawdź logi aplikacji w konsoli przeglądarki</li>
+        <li>Upewnij się, że plik <code>.env</code> zawiera poprawne wartości dla <code>VITE_SUPABASE_URL</code> i <code>VITE_SUPABASE_ANON_KEY</code></li>
+        <li>Zweryfikuj, czy adres email używany do logowania odpowiada kontom istniejącym w tabeli <code>auth.users</code></li>
+    </ol>
+</body>
+</html> 

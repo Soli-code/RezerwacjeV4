@@ -8,7 +8,10 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node test-email.js"
+    "test": "node test-email.js",
+    "db:check": "node migrations/check_db_status.js",
+    "db:migrate": "node migrations/run_migration.js",
+    "db:fix": "node migrations/fix_login.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -25,9 +28,10 @@
     "@radix-ui/react-select": "^2.1.6",
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-tabs": "^1.1.3",
+    "@sendgrid/mail": "^8.1.4",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
-    "@supabase/supabase-js": "^2.39.7",
+    "@supabase/supabase-js": "^2.49.1",
     "@tiptap/extension-placeholder": "^2.2.4",
     "@tiptap/react": "^2.2.4",
     "@tiptap/starter-kit": "^2.2.4",
@@ -37,6 +41,7 @@
     "class-variance-authority": "^0.7.1",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.0",
+    "esm": "^3.2.25",
     "framer-motion": "^11.0.8",
     "handlebars": "^4.7.8",
     "jspdf": "^1.4.0",

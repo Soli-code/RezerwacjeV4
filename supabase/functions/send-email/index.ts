@@ -1,116 +1,130 @@
-import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-console.log('Function starting...')
+interface EmailRequest {
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+}
+
+const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 serve(async (req) => {
-  console.log('Request received')
-  console.log('Request method:', req.method)
-  console.log('Request headers:', Object.fromEntries(req.headers.entries()))
-  
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    console.log('Handling OPTIONS request')
     return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+      status: 204,
+      headers: corsHeaders,
     });
+  }
+
+  // Sprawdź, czy klucz API SendGrid jest dostępny
+  if (!SENDGRID_API_KEY) {
+    console.error("Brak klucza API SendGrid");
+    return new Response(
+      JSON.stringify({ error: "Brak klucza API SendGrid" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 
   try {
-    // Validate authorization header
-    const authHeader = req.headers.get("authorization");
-    console.log('Auth header:', authHeader)
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.error('Unauthorized')
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    const { to, subject, html, text }: EmailRequest = await req.json();
 
-    // Parse request body
-    const requestData = await req.json();
-    console.log("Received request data:", JSON.stringify(requestData, null, 2));
-    
-    // Validate required fields
-    const requiredFields = ["recipientEmail", "templateId", "templateData"];
-    for (const field of requiredFields) {
-      if (!requestData[field]) {
-        console.error(`Missing required field: ${field}`)
-        return new Response(JSON.stringify({ error: `Missing required field: ${field}` }), {
+    if (!to || !subject || (!html && !text)) {
+      return new Response(
+        JSON.stringify({ error: "Wymagane pola: to, subject i (html lub text)" }),
+        {
           status: 400,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Fetch email template from Supabase
-    const { data: template, error: templateError } = await supabase
-      .from('email_templates')
-      .select('*')
-      .eq('id', requestData.templateId)
-      .single();
-
-    if (templateError || !template) {
-      console.error('Template error:', templateError);
-      throw new Error('Email template not found');
+    // Walidacja adresu email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to)) {
+      return new Response(
+        JSON.stringify({ error: "Nieprawidłowy format adresu email" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    // Replace template variables with actual data
-    let htmlContent = template.html_content;
-    for (const [key, value] of Object.entries(requestData.templateData)) {
-      htmlContent = htmlContent.replace(new RegExp(`{{${key}}}`, 'g'), String(value));
-    }
+    console.log(`Wysyłanie emaila do: ${to}, temat: ${subject}`);
 
-    console.log("Sending email via Resend...");
+    // Przygotowanie wiadomości
+    const message = {
+      personalizations: [
+        {
+          to: [{ email: to }],
+        },
+      ],
+      from: {
+        email: "biuro@solrent.pl",
+        name: "SOLRENT",
+      },
+      subject,
+      content: [
+        {
+          type: "text/html",
+          value: html || text,
+        },
+      ],
+    };
 
-    // Send email using Resend API
-    const response = await fetch("https://api.resend.com/emails", {
+    // Wysłanie emaila za pomocą bezpośredniego API SendGrid
+    const sendgridResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer re_XsXzFXCn_HfPK82Y9Cc8NdSLu9ysE46C4`,
+        Authorization: `Bearer ${SENDGRID_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: `SOLRENT Rezerwacje <biuro@solrent.pl>`,
-        to: requestData.recipientEmail,
-        subject: template.subject,
-        html: htmlContent,
-      }),
+      body: JSON.stringify(message),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error("Resend API error:", error);
-      throw new Error(error.message || "Failed to send email via Resend");
+    if (!sendgridResponse.ok) {
+      const errorData = await sendgridResponse.text();
+      console.error(`Błąd SendGrid (${sendgridResponse.status}):`, errorData);
+      return new Response(
+        JSON.stringify({ 
+          error: `Błąd SendGrid: ${errorData}`,
+          status: sendgridResponse.status 
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    console.log("Email sent successfully");
+    console.log(`Email wysłany pomyślnie do: ${to}`);
 
-    return new Response(JSON.stringify({ message: "Email sent successfully" }), {
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
-
+    return new Response(
+      JSON.stringify({ success: true, message: "Email został wysłany" }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   } catch (error) {
-    console.error("Error sending email:", error);
-    return new Response(JSON.stringify({ error: `Failed to send email: ${error.message}` }), {
-      status: 500,
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    console.error("Błąd podczas wysyłania emaila:", error);
+    
+    return new Response(
+      JSON.stringify({ error: `Błąd: ${error.message}` }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
-}) 
+}); 

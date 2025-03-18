@@ -12,24 +12,50 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          created_at: string
-          email: string
-          full_name: string | null
           is_admin: boolean
+          created_at: string
+          updated_at: string
+          email: string | null
+          full_name: string | null
         }
         Insert: {
           id: string
-          created_at?: string
-          email: string
-          full_name?: string | null
           is_admin?: boolean
+          created_at?: string
+          updated_at?: string
+          email?: string | null
+          full_name?: string | null
         }
         Update: {
           id?: string
-          created_at?: string
-          email?: string
-          full_name?: string | null
           is_admin?: boolean
+          created_at?: string
+          updated_at?: string
+          email?: string | null
+          full_name?: string | null
+        }
+      },
+      admin_actions: {
+        Row: {
+          id: string
+          user_id: string | null
+          action_type: string
+          action_details: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          action_type: string
+          action_details?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          action_type?: string
+          action_details?: Json | null
+          created_at?: string
         }
       }
       // Dodaj tutaj inne tabele z Twojej bazy danych

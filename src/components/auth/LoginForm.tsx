@@ -7,6 +7,7 @@ interface LoginFormProps {
   error: string;
   isLoading: boolean;
   isLocked: boolean;
+  connectionStatus?: 'checking' | 'connected' | 'disconnected';
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ 
