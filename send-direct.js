@@ -1,6 +1,6 @@
 // Bezpośredni test wysyłania maila przez SendGrid API
 import sgMail from '@sendgrid/mail';
-const API_KEY = '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';
+const API_KEY = process.env.SENDGRID_API_KEY;
 
 sgMail.setApiKey(API_KEY);
 
