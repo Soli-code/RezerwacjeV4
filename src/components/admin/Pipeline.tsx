@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DndContext,
   DragOverlay,
@@ -60,6 +60,7 @@ interface Reservation {
 
 const Pipeline: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [columns, setColumns] = useState<PipelineColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,17 +82,161 @@ const Pipeline: React.FC = () => {
   const loadPipelineData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.rpc('get_pipeline_data', {});
       
-      if (error) throw error;
-      if (data && data.columns) {
-        setColumns(data.columns);
+      // Tworzymy domyślną strukturę kolumn
+      const defaultColumns: PipelineColumn[] = [
+        {
+          id: 'pending',
+          title: 'Oczekujące',
+          reservations: []
+        },
+        {
+          id: 'confirmed',
+          title: 'Potwierdzone',
+          reservations: []
+        },
+        {
+          id: 'in_progress',
+          title: 'W trakcie',
+          reservations: []
+        },
+        {
+          id: 'completed',
+          title: 'Zakończone',
+          reservations: []
+        },
+        {
+          id: 'cancelled',
+          title: 'Anulowane',
+          reservations: []
+        }
+      ];
+      
+      try {
+        // Próba pobrania danych przez RPC
+        const { data, error } = await supabase.rpc('get_admin_pipeline_data', {
+          p_date_range: '30days',
+          p_status: ['pending', 'confirmed', 'completed', 'in_progress', 'cancelled']
+        });
+        
+        if (!error && data && data.columns) {
+          setColumns(data.columns);
+          setLoading(false);
+          return;
+        }
+      } catch (rpcError) {
+        console.error('RPC Error:', rpcError);
+        // Kontynuuj do fallbacku
+      }
+      
+      // Fallback: pobierz rezerwacje bezpośrednio
+      const { data: reservationsData, error: reservationsError } = await supabase
+        .from('reservations')
+        .select(`
+          id,
+          status,
+          start_date,
+          end_date,
+          start_time,
+          end_time,
+          total_price,
+          customers (
+            id,
+            first_name,
+            last_name,
+            email,
+            phone,
+            company_name,
+            company_nip
+          ),
+          reservation_items (
+            id,
+            equipment_id,
+            equipment:equipment (
+              name
+            ),
+            quantity
+          )
+        `);
+        
+      if (reservationsError) {
+        throw reservationsError;
+      }
+      
+      if (reservationsData) {
+        // Przekształcenie danych rezerwacji do wymaganego formatu
+        const newColumns = [...defaultColumns];
+        
+        reservationsData.forEach((reservation: any) => {
+          const columnId = reservation.status || 'pending';
+          const columnIndex = newColumns.findIndex(c => c.id === columnId);
+          
+          if (columnIndex >= 0) {
+            const formattedReservation: Reservation = {
+              id: reservation.id,
+              customer: {
+                id: reservation.customers?.id || '',
+                first_name: reservation.customers?.first_name || '',
+                last_name: reservation.customers?.last_name || '',
+                email: reservation.customers?.email || '',
+                phone: reservation.customers?.phone || '',
+                company_name: reservation.customers?.company_name,
+                company_nip: reservation.customers?.company_nip
+              },
+              dates: {
+                start: reservation.start_date || new Date().toISOString(),
+                end: reservation.end_date || new Date().toISOString()
+              },
+              total_price: reservation.total_price || 0,
+              items: Array.isArray(reservation.reservation_items) 
+                ? reservation.reservation_items.map((item: any) => ({
+                    id: item.id || `temp-${Math.random().toString(36).substring(2, 9)}`,
+                    equipment_name: item.equipment?.name || 'Nieznany sprzęt',
+                    quantity: item.quantity || 1
+                  }))
+                : []
+            };
+            
+            newColumns[columnIndex].reservations.push(formattedReservation);
+          }
+        });
+        
+        setColumns(newColumns);
       } else {
-        setColumns([]);
+        // Brak danych, ustaw puste kolumny
+        setColumns(defaultColumns);
       }
     } catch (err) {
       console.error('Error loading pipeline data:', err);
       setError('Nie udało się załadować danych');
+      // Utwórz pustą strukturę danych
+      setColumns([
+        {
+          id: 'pending',
+          title: 'Oczekujące',
+          reservations: []
+        },
+        {
+          id: 'confirmed',
+          title: 'Potwierdzone',
+          reservations: []
+        },
+        {
+          id: 'in_progress',
+          title: 'W trakcie',
+          reservations: []
+        },
+        {
+          id: 'completed',
+          title: 'Zakończone',
+          reservations: []
+        },
+        {
+          id: 'cancelled',
+          title: 'Anulowane',
+          reservations: []
+        }
+      ]);
     } finally {
       setLoading(false);
     }
@@ -207,106 +352,109 @@ const Pipeline: React.FC = () => {
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-3">
-                  {column.reservations?.map((reservation) => (
-                    <motion.div
-                      key={reservation.id}
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      className={`bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all ${
-                        activeId === reservation.id ? 'ring-2 ring-solrent-orange' : ''
-                      }`}
-                      onClick={() => {
-                        navigate(`/admin/panel/reservations/${reservation.id}`, {
-                          state: { from: location.pathname + location.search }
-                        });
-                      }}
-                    >
-                      {/* Nagłówek karty */}
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <h4 className="font-medium text-gray-900 text-sm">
-                            {reservation.customer.first_name} {reservation.customer.last_name}
-                          </h4>
-                          <div className="flex items-center text-xs text-gray-500 mt-1">
-                            <Mail className="w-4 h-4 mr-1" />
-                            {reservation.customer.email}
-                          </div>
-                          <div className="flex items-center text-xs text-gray-500 mt-1">
-                            <Phone className="w-4 h-4 mr-1" />
-                            {reservation.customer.phone}
-                          </div>
-                          {reservation.customer.company_name && (
+                  {column.reservations && column.reservations.length > 0 ? (
+                    column.reservations.map((reservation) => (
+                      <motion.div
+                        key={reservation.id}
+                        layout
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className={`bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all ${
+                          activeId === reservation.id ? 'ring-2 ring-solrent-orange' : ''
+                        }`}
+                        onClick={() => {
+                          navigate(`/admin/panel/reservations/${reservation.id}`, {
+                            state: { from: location.pathname + location.search }
+                          });
+                        }}
+                      >
+                        {/* Nagłówek karty */}
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-medium text-gray-900 text-sm">
+                              {reservation.customer?.first_name || ''} {reservation.customer?.last_name || ''}
+                            </h4>
                             <div className="flex items-center text-xs text-gray-500 mt-1">
-                              <Building2 className="w-4 h-4 mr-1" />
-                              {reservation.customer.company_name}
+                              <Mail className="w-4 h-4 mr-1" />
+                              {reservation.customer?.email || ''}
                             </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Daty rezerwacji */}
-                      <div className="flex items-center text-xs text-gray-600 mb-2 bg-gray-50 p-2 rounded">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        <span>
-                          {new Date(reservation.dates.start).toLocaleDateString()} - {new Date(reservation.dates.end).toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      {/* Lista sprzętu */}
-                      <div className="space-y-1.5 mb-3">
-                        {reservation.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center text-xs bg-gray-50 p-1.5 rounded">
-                            <Package className="w-4 h-4 mr-1 text-gray-400" />
-                            <span>{item.equipment_name} (x{item.quantity})</span>
+                            <div className="flex items-center text-xs text-gray-500 mt-1">
+                              <Phone className="w-4 h-4 mr-1" />
+                              {reservation.customer?.phone || ''}
+                            </div>
+                            {reservation.customer?.company_name && (
+                              <div className="flex items-center text-xs text-gray-500 mt-1">
+                                <Building2 className="w-4 h-4 mr-1" />
+                                {reservation.customer.company_name}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
+                        </div>
 
-                      {/* Stopka karty */}
-                      <div className="flex justify-between items-center pt-2 border-t">
-                        <span className="font-medium text-solrent-orange text-sm">
-                          {reservation.total_price.toFixed(2)} zł
-                        </span>
-                        <div className="flex space-x-2">
-                          {column.id === 'pending' && (
-                            <>
+                        {/* Daty rezerwacji */}
+                        <div className="flex items-center text-xs text-gray-600 mb-2 bg-gray-50 p-2 rounded">
+                          <Calendar className="w-4 h-4 mr-1" />
+                          <span>
+                            {reservation.dates?.start ? new Date(reservation.dates.start).toLocaleDateString() : ''} - 
+                            {reservation.dates?.end ? new Date(reservation.dates.end).toLocaleDateString() : ''}
+                          </span>
+                        </div>
+
+                        {/* Lista sprzętu */}
+                        <div className="space-y-1.5 mb-3">
+                          {Array.isArray(reservation.items) && reservation.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center text-xs bg-gray-50 p-1.5 rounded">
+                              <Package className="w-4 h-4 mr-1 text-gray-400" />
+                              <span>{item.equipment_name || 'Nieznany sprzęt'} (x{item.quantity || 1})</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Stopka karty */}
+                        <div className="flex justify-between items-center pt-2 border-t">
+                          <span className="font-medium text-solrent-orange text-sm">
+                            {typeof reservation.total_price === 'number' ? reservation.total_price.toFixed(2) : '0.00'} zł
+                          </span>
+                          <div className="flex space-x-2">
+                            {column.id === 'pending' && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStatusChange(reservation.id, 'confirmed');
+                                  }}
+                                  className="p-1.5 text-green-600 hover:bg-green-50 rounded-full"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStatusChange(reservation.id, 'cancelled');
+                                  }}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded-full"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {column.id === 'confirmed' && (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleStatusChange(reservation.id, 'confirmed');
+                                  handleStatusChange(reservation.id, 'completed');
                                 }}
-                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-full"
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full"
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStatusChange(reservation.id, 'cancelled');
-                                }}
-                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-full"
-                              >
-                                <XCircle className="w-4 h-4" />
-                              </button>
-                            </>
-                          )}
-                          {column.id === 'confirmed' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStatusChange(reservation.id, 'completed');
-                              }}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </button>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </motion.div>
+                    ))
+                  ) : null}
                 </div>
               </SortableContext>
             </div>
@@ -321,10 +469,10 @@ const Pipeline: React.FC = () => {
                 return (
                   <div>
                     <h4 className="font-medium text-gray-900">
-                      {reservation.customer.first_name} {reservation.customer.last_name}
+                      {reservation.customer?.first_name || ''} {reservation.customer?.last_name || ''}
                     </h4>
                     <p className="text-sm text-gray-500">
-                      {new Date(reservation.dates.start).toLocaleDateString()}
+                      {reservation.dates?.start ? new Date(reservation.dates.start).toLocaleDateString() : ''}
                     </p>
                   </div>
                 );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseRequestWithRetry, checkSupabaseConnection } from '../../lib/supabase';
 import LoginForm from './LoginForm';
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -14,8 +14,12 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
 
   useEffect(() => {
+    // Sprawdź połączenie z Supabase
+    checkConnectionStatus();
+
     // Sprawdź czy użytkownik jest zablokowany
     const storedLockout = localStorage.getItem('adminLoginLockout');
     if (storedLockout) {
@@ -28,6 +32,12 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
       }
     }
   }, []);
+
+  const checkConnectionStatus = async () => {
+    setConnectionStatus('checking');
+    const isConnected = await checkSupabaseConnection();
+    setConnectionStatus(isConnected ? 'connected' : 'disconnected');
+  };
 
   const handleLoginFailure = () => {
     const newAttempts = loginAttempts + 1;
@@ -43,6 +53,15 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
   const handleSubmit = async (email: string, password: string) => {
     setError('');
     
+    // Sprawdź status połączenia
+    if (connectionStatus === 'disconnected') {
+      await checkConnectionStatus();
+      if (connectionStatus === 'disconnected') {
+        setError('Brak połączenia z serwerem. Sprawdź połączenie internetowe i spróbuj ponownie.');
+        return;
+      }
+    }
+    
     // Sprawdź czy użytkownik nie jest zablokowany
     if (lockoutUntil && lockoutUntil > Date.now()) {
       const minutesLeft = Math.ceil((lockoutUntil - Date.now()) / 60000);
@@ -53,23 +72,68 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
     setIsLoading(true);
     
     try {
-      const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (signInError) throw signInError;
+      // Logowanie bezpośrednio przez AuthAPI
+      let response;
+      try {
+        response = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+      } catch (loginError: any) {
+        console.error('Błąd logowania:', loginError);
+        
+        // Obsługa specyficznych błędów autoryzacji
+        if (loginError.message?.includes('Database error: querying schema')) {
+          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        }
+        
+        throw loginError;
+      }
+      
+      const { data, error: signInError } = response;
+      
+      if (signInError) {
+        // Obsługa specyficznych błędów autoryzacji
+        if (signInError.message?.includes('Database error: querying schema')) {
+          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        }
+        
+        throw signInError;
+      }
+      
+      const user = data.user;
       if (!user) throw new Error('Nie znaleziono użytkownika');
 
       // Sprawdź czy użytkownik jest administratorem
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
+      let profileResponse;
+      try {
+        profileResponse = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+      } catch (profileError: any) {
+        console.error('Błąd pobierania profilu:', profileError);
+        
+        // Obsługa specyficznych błędów profilu
+        if (profileError.message?.includes('Database error: querying schema')) {
+          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        }
+        
+        throw new Error('Błąd podczas weryfikacji uprawnień administratora');
+      }
+      
+      const { data: profile, error: profileError } = profileResponse;
+      
+      if (profileError) {
+        // Obsługa specyficznych błędów profilu
+        if (profileError.message?.includes('Database error: querying schema')) {
+          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        }
+        
+        throw profileError;
+      }
+      
       if (!profile?.is_admin) {
         throw new Error('Brak uprawnień administratora');
       }
@@ -78,17 +142,21 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
       setLoginAttempts(0);
       localStorage.removeItem('adminLoginLockout');
 
-      // Zapisz timestamp ostatniego udanego logowania
-      await supabase
-        .from('admin_actions')
-        .insert({
-          action_type: 'login',
-          action_details: {
-            email: email,
-            timestamp: new Date().toISOString(),
-            ip_address: await fetch('https://api.ipify.org?format=json').then(res => res.json()).then(data => data.ip)
-          }
-        });
+      try {
+        // Zapisz timestamp ostatniego udanego logowania
+        await supabase
+          .from('admin_actions')
+          .insert({
+            action_type: 'login',
+            action_details: {
+              email: email,
+              timestamp: new Date().toISOString()
+            }
+          });
+      } catch (historyError) {
+        // Ignoruj błędy zapisu historii - to nie powinno przerywać logowania
+        console.warn('Nie udało się zapisać historii logowania:', historyError);
+      }
 
       onLogin();
     } catch (error) {
@@ -99,7 +167,11 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
             ? 'Nieprawidłowe dane logowania'
             : error.message === 'Brak uprawnień administratora'
             ? 'Brak uprawnień administratora'
-            : 'Wystąpił nieoczekiwany błąd'
+            : error.message.includes('Failed to fetch') || error.message.includes('fetch failed')
+            ? 'Problem z połączeniem z serwerem. Sprawdź połączenie internetowe.'
+            : error.message.includes('Database error')
+            ? 'Błąd bazy danych. Skontaktuj się z administratorem systemu.'
+            : 'Wystąpił nieoczekiwany błąd: ' + error.message
         );
       } else {
         setError('Wystąpił nieoczekiwany błąd');
@@ -120,13 +192,25 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
           <p className="mt-2 text-center text-sm text-gray-600">
             Zaloguj się aby zarządzać systemem
           </p>
+          {connectionStatus === 'disconnected' && (
+            <div className="mt-2 bg-yellow-50 p-2 rounded text-sm text-yellow-700 text-center">
+              Problem z połączeniem z serwerem. 
+              <button 
+                className="ml-2 underline" 
+                onClick={checkConnectionStatus}
+              >
+                Sprawdź ponownie
+              </button>
+            </div>
+          )}
         </div>
 
         <LoginForm 
           onSubmit={handleSubmit}
           error={error}
-          isLoading={isLoading}
+          isLoading={isLoading || connectionStatus === 'checking'}
           isLocked={!!lockoutUntil && lockoutUntil > Date.now()}
+          connectionStatus={connectionStatus}
         />
       </div>
     </div>

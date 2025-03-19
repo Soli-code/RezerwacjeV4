@@ -81,9 +81,11 @@ export const updateReservationStatus = async (
     const statusMap = {
       'pending': 'Oczekująca',
       'confirmed': 'Potwierdzona',
+      'picked_up': 'Odebrana',
       'in_progress': 'W trakcie',
       'completed': 'Zakończona',
-      'cancelled': 'Anulowana'
+      'cancelled': 'Anulowana',
+      'archived': 'Zarchiwizowana'
     };
 
     const templateData = {
@@ -94,16 +96,22 @@ export const updateReservationStatus = async (
       start_time: reservation.start_time || '08:00',
       end_date: new Date(reservation.end_date).toLocaleDateString('pl-PL'),
       end_time: reservation.end_time || '16:00',
-      days: reservation.days || '1',
+      days: reservation.days?.toString() || '1',
       equipment: equipmentText,
-      total_price: reservation.total_price || '0',
-      deposit: reservation.deposit || '0'
+      total_price: reservation.total_price?.toString() || '0',
+      deposit: reservation.deposit?.toString() || '0'
     };
 
     // Wybierz odpowiedni szablon w zależności od statusu
     let emailTemplate;
     if (newStatus === 'cancelled') {
       emailTemplate = emailTemplates.cancelReservation;
+    } else if (newStatus === 'confirmed') {
+      emailTemplate = emailTemplates.statusUpdate;
+    } else if (newStatus === 'picked_up') {
+      emailTemplate = emailTemplates.statusUpdate;
+    } else if (newStatus === 'completed') {
+      emailTemplate = emailTemplates.thankYou;
     } else {
       emailTemplate = emailTemplates.statusUpdate;
     }
@@ -115,6 +123,16 @@ export const updateReservationStatus = async (
       htmlContent: emailTemplate.htmlContent,
       templateData
     });
+
+    // Zapisz log wysłania emaila
+    await supabase.from('email_notifications').insert([
+      {
+        reservation_id: reservationId,
+        recipient: reservation.customer.email,
+        type: 'status_update',
+        status: 'sent'
+      }
+    ]);
 
     console.log(`Email z aktualizacją statusu (${newStatus}) wysłany pomyślnie`);
   } catch (error) {

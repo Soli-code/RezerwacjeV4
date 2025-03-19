@@ -1,6 +1,7 @@
 /**
  * Funkcje pomocnicze do obsługi dat i dostępności sprzętu
  */
+import { supabase } from './supabase';
 
 /**
  * Sprawdza, czy data jest dostępna do rezerwacji
@@ -43,7 +44,12 @@ export const isSaturdayAfterCutoff = (date: Date, cutoffHour: number = 12): bool
 /**
  * Oblicza liczbę dni między dwiema datami
  */
-export const calculateRentalDays = (startDate: Date | null, endDate: Date | null): number => {
+export const calculateRentalDays = (
+  startDate: Date | null, 
+  endDate: Date | null,
+  startTime: string | null = null,
+  endTime: string | null = null
+): number => {
   if (!startDate || !endDate) {
     return 0;
   }
@@ -78,7 +84,12 @@ export const formatDate = (date: Date): string => {
 /**
  * Sprawdza dostępność sprzętu w danym terminie
  */
-export const checkAvailability = async (equipmentIds: string[], startDate: Date, endDate: Date): Promise<boolean> => {
+export const checkAvailability = async (
+  equipmentId: string, 
+  startDate: Date, 
+  endDate: Date,
+  isRangeCheck: boolean = false
+): Promise<boolean> => {
   // W rzeczywistej implementacji, tutaj byłoby zapytanie do bazy danych
   // Na potrzeby przykładu, zawsze zwracamy true
   return true;
@@ -87,24 +98,83 @@ export const checkAvailability = async (equipmentIds: string[], startDate: Date,
 /**
  * Zwraca następną dostępną datę
  */
-export const getNextAvailableDate = (currentDate: Date, bookedDates: Date[] = []): Date => {
+export const getNextAvailableDate = async (equipmentId: string, currentDate: Date): Promise<Date> => {
   const nextDate = new Date(currentDate);
   nextDate.setDate(nextDate.getDate() + 1);
   
-  while (!isDateAvailable(nextDate, bookedDates)) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-  
+  // W rzeczywistej implementacji, tutaj byłoby sprawdzenie dostępności w bazie danych
+  // Na potrzeby przykładu, zwracamy datę przesuniętą o 1 dzień
   return nextDate;
 };
 
 /**
  * Pobiera rezerwacje w danym zakresie dat
  */
-export const getReservationsInRange = async (startDate: Date, endDate: Date): Promise<any[]> => {
-  // W rzeczywistej implementacji, tutaj byłoby zapytanie do bazy danych
-  // Na potrzeby przykładu, zwracamy pustą tablicę
-  return [];
+export const getReservationsInRange = async (
+  equipmentIds: string[],
+  startDate: Date,
+  endDate: Date
+): Promise<Map<string, any[]>> => {
+  try {
+    // Pobieranie rezerwacji z bazy danych
+    const { data, error } = await supabase
+      .from('reservations')
+      .select(`
+        id,
+        start_date,
+        end_date,
+        start_time,
+        end_time,
+        status,
+        reservation_items!inner (
+          equipment_id,
+          equipment:equipment (
+            name,
+            description
+          )
+        )
+      `)
+      .gte('start_date', startDate.toISOString())
+      .lte('end_date', endDate.toISOString())
+      .neq('status', 'cancelled');
+
+    if (error) {
+      console.error('Błąd podczas pobierania rezerwacji:', error);
+      return new Map();
+    }
+
+    // Grupowanie rezerwacji według equipment_id
+    const reservationsMap = new Map<string, any[]>();
+    
+    // Inicjalizacja mapy dla każdego sprzętu
+    equipmentIds.forEach(id => {
+      reservationsMap.set(id, []);
+    });
+
+    // Wypełnianie mapy rezerwacjami
+    if (data) {
+      data.forEach((reservation: any) => {
+        reservation.reservation_items.forEach((item: any) => {
+          const equipmentId = item.equipment_id;
+          if (equipmentIds.includes(equipmentId)) {
+            // Dodajemy informację o sprzęcie do obiektu rezerwacji
+            const reservationWithEquipment = {
+              ...reservation,
+              equipment_name: item.equipment?.name || 'Nieznany sprzęt'
+            };
+            const currentReservations = reservationsMap.get(equipmentId) || [];
+            currentReservations.push(reservationWithEquipment);
+            reservationsMap.set(equipmentId, currentReservations);
+          }
+        });
+      });
+    }
+
+    return reservationsMap;
+  } catch (error) {
+    console.error('Wystąpił błąd podczas pobierania rezerwacji:', error);
+    return new Map();
+  }
 };
 
 /**
@@ -127,6 +197,6 @@ export const formatTime = (time: string): string => {
 /**
  * Formatuje datę i czas
  */
-export const formatDateTime = (date: Date, time: string): string => {
-  return `${formatDate(date)}, ${time}`;
+export const formatDateTime = (date: Date): string => {
+  return `${formatDate(date)}, ${date.getHours().toString().padStart(2, '0')}:00`;
 };

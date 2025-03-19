@@ -35,9 +35,7 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
     const loadEquipment = async () => {
       try {
         setIsLoading(true);
-        console.log('Rozpoczynam ładowanie sprzętu...');
         const data = await getEquipment();
-        console.log('Pobrane dane sprzętu:', data);
         if (data.length > 0) {
           setEquipmentData(data);
           setError(null);
@@ -428,39 +426,29 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredEquipment.map((item, index) => {
           const isSelected = getItemQuantity(item.id) > 0;
           const currentQuantity = getItemQuantity(item.id);
           
-          console.log(`Renderowanie kafelka dla ${item.name}, URL obrazu: ${item.image}`);
-          
           return (
             <div 
               key={item.id} 
-              className={`border rounded-lg overflow-hidden flex flex-col md:flex-row transition-all duration-200 cursor-pointer w-full shadow-sm hover:shadow-md ${
-                isSelected ? 'bg-[#e6f3ff] border-[#0066cc] border-2' : 'bg-white hover:bg-gray-50'
+              className={`border rounded-lg overflow-hidden flex min-h-[12rem] transition-all duration-200 cursor-pointer w-full ${
+                isSelected ? 'bg-[#e6f3ff] border-[#0066cc] border-2' : 'bg-white'
               }`}
-              onClick={() => {
-                if (currentQuantity < item.quantity) {
-                  handleQuantityChange(item, currentQuantity + 1);
-                }
-              }}
+              onClick={() => setSelectedModalItem(item)}
             >
-              <div className="w-full md:w-2/5 h-[180px] relative p-3 flex items-center justify-center border-b md:border-b-0 md:border-r border-gray-100">
+              <div className="w-1/3 min-w-[80px] relative p-3">
                 <img 
                   src={item.image} 
                   alt={item.name} 
-                  className="w-full h-full object-contain max-h-[160px]"
-                  onError={(e) => {
-                    console.error(`Błąd ładowania obrazu: ${item.image}`);
-                    e.currentTarget.src = '/assets/placeholder.png'; // Zastępczy obraz
-                  }}
+                  className="w-full h-full object-contain"
                 />
               </div>
-              <div className="w-full md:w-3/5 p-4 flex flex-col justify-between">
+              <div className="w-2/3 p-3 flex flex-col justify-between">
                 <div className="space-y-2">
-                  <h3 className="font-medium text-gray-900 text-base">{item.name}</h3>
+                  <h3 className="font-medium text-gray-900 text-sm">{item.name}</h3>
                   <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
                   <div>
                     {item.deposit > 0 && (
@@ -471,7 +459,7 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
                         e.stopPropagation();
                         setSelectedModalItem(item);
                       }}
-                      className="mt-2 px-2 py-1 bg-solrent-orange text-white text-sm rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-1"
+                      className="mt-1 px-2 py-1 bg-solrent-orange text-white text-sm rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-1"
                       aria-label={`Zobacz szczegóły ${item.name}`}
                     >
                       <Package className="w-4 h-4" />
@@ -479,7 +467,7 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-3">
+                <div className="flex items-center justify-between mt-2">
                   <span className="font-bold text-solrent-orange">
                     <span>{item.price} zł/dzień</span>
                     {item.promotional_price && (
@@ -488,29 +476,24 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2" onClick={e => e.stopPropagation()}>
+                    {currentQuantity > 0 && (
+                      <>
+                        <button
+                          onClick={() => handleQuantityChange(item, currentQuantity - 1)}
+                          className="p-1 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
+                        >
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="w-6 text-center font-medium">
+                          {currentQuantity}
+                        </span>
+                      </>
+                    )}
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleQuantityChange(item, currentQuantity - 1);
-                      }}
-                      disabled={currentQuantity === 0}
-                      className={`p-1.5 rounded-full transition-all ${
-                        currentQuantity === 0
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-orange-100 text-solrent-orange hover:bg-orange-200'
-                      }`}
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <span className="w-6 text-center font-medium">{currentQuantity}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleQuantityChange(item, currentQuantity + 1);
-                      }}
+                      onClick={() => handleQuantityChange(item, currentQuantity + 1)}
                       disabled={currentQuantity >= item.quantity}
-                      className={`p-1.5 rounded-full transition-all ${
+                      className={`p-1 rounded-full transition-all ${
                         currentQuantity >= item.quantity
                           ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                           : 'bg-orange-100 text-solrent-orange hover:bg-orange-200'

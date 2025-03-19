@@ -3,8 +3,8 @@ import { Calendar, Clock, Users, Package, CheckCircle } from 'lucide-react';
 import DatePicker from './DatePicker';
 import EquipmentSelector from './EquipmentSelector';
 import PersonalInfoForm from '../forms/PersonalInfoForm';
-import Summary from '../ui/Summary';
-import CollapsibleSummary from '../ui/CollapsibleSummary';
+import Summary from "../ui/Summary";
+import CollapsibleSummary from "../ui/CollapsibleSummary";
 
 const STEPS = [
   { id: 'equipment', label: 'Wybierz sprzęt', icon: Package },
@@ -18,8 +18,27 @@ const ReservationWidget = () => {
   const [highestStepReached, setHighestStepReached] = useState(0);
   const [isPersonalInfoValid, setIsPersonalInfoValid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const summaryRef = useRef(null);
-  const [reservation, setReservation] = useState({
+  const summaryRef = useRef<{ handleSubmitReservation: () => void }>(null);
+  const [reservation, setReservation] = useState<{
+    startDate: Date | null;
+    endDate: Date | null;
+    startTime: string | null;
+    endTime: string | null;
+    equipment: Array<{ id: string; name: string; quantity: number; price: number; deposit?: number; promotional_price?: number }>;
+    personalInfo: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      phone: string;
+      comment: string;
+      termsAccepted: boolean;
+      companyName?: string;
+      companyNip?: string;
+      companyStreet?: string;
+      companyPostalCode?: string;
+      companyCity?: string;
+    };
+  }>({
     startDate: null,
     endDate: null,
     startTime: null,
@@ -35,14 +54,14 @@ const ReservationWidget = () => {
     },
   });
 
-  const updateReservation = (field, value) => {
+  const updateReservation = (field: keyof typeof reservation, value: any) => {
     setReservation(prev => ({
       ...prev,
       [field]: value,
     }));
   };
 
-  const handleRemoveItem = (itemId) => {
+  const handleRemoveItem = (itemId: string) => {
     updateReservation('equipment', 
       reservation.equipment.filter(item => item.id !== itemId)
     );
@@ -52,7 +71,7 @@ const ReservationWidget = () => {
     updateReservation('equipment', []);
   };
 
-  const isStepComplete = (stepIndex) => {
+  const isStepComplete = (stepIndex: number) => {
     switch (stepIndex) {
       case 0:
         return reservation.equipment.length > 0;
@@ -67,7 +86,7 @@ const ReservationWidget = () => {
     }
   };
 
-  const canNavigateToStep = (stepIndex) => {
+  const canNavigateToStep = (stepIndex: number) => {
     if (stepIndex <= highestStepReached) {
       return Array.from({ length: stepIndex }, (_, i) => i)
         .every(step => isStepComplete(step));
@@ -89,7 +108,7 @@ const ReservationWidget = () => {
     }
   };
 
-  const handleStepClick = (stepIndex) => {
+  const handleStepClick = (stepIndex: number) => {
     if (canNavigateToStep(stepIndex)) {
       setCurrentStep(stepIndex);
     }
@@ -105,7 +124,7 @@ const ReservationWidget = () => {
         return (
           <EquipmentSelector 
             selectedEquipment={reservation.equipment}
-            onChange={(equipment) => updateReservation('equipment', equipment)}
+            onChange={(equipment: any[]) => updateReservation('equipment', equipment)}
             onNext={nextStep}
           />
         );
@@ -130,14 +149,14 @@ const ReservationWidget = () => {
           <PersonalInfoForm 
             personalInfo={reservation.personalInfo}
             onValidityChange={setIsPersonalInfoValid}
-            onChange={(personalInfo) => updateReservation('personalInfo', personalInfo)}
+            onChange={(personalInfo: typeof reservation.personalInfo) => updateReservation('personalInfo', personalInfo)}
           />
         );
       case 3:
         return (
           <Summary 
             ref={summaryRef}
-            reservation={reservation}
+            reservation={reservation as any}
             onSubmit={handleSubmitSuccess}
           />
         );

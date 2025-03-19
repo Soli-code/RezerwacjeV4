@@ -1,28 +1,20 @@
 import { supabase } from './supabase';
+import { sendTemplateEmail, emailTemplates } from './email-utils';
 import { retryWithBackoff } from './utils';
 
 interface EmailData {
+  email: string;
   firstName: string;
   lastName: string;
-  email: string;
   phone: string;
   startDate: string;
+  startTime?: string;
   endDate: string;
-  startTime: string;
-  endTime: string;
-  days: number;
-  equipment: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-  }>;
-  totalPrice: number;
-  deposit: number;
-  companyName?: string;
-  companyNip?: string;
-  companyStreet?: string;
-  companyPostalCode?: string;
-  companyCity?: string;
+  endTime?: string;
+  equipment: string;
+  days: string;
+  totalPrice: string;
+  deposit: string;
   comment?: string;
 }
 
@@ -34,7 +26,7 @@ export const sendEmails = async (data: EmailData): Promise<void> => {
     }
 
     // Walidacja długości i formatu danych
-    if (data.phone.replace(/\s/g, '').length !== 9) {
+    if (data.phone && data.phone.replace(/\s/g, '').length !== 9) {
       throw new Error('Nieprawidłowy format numeru telefonu');
     }
 
@@ -42,35 +34,57 @@ export const sendEmails = async (data: EmailData): Promise<void> => {
       throw new Error('Komentarz nie może przekraczać 500 znaków');
     }
 
-    // Zapisz informację o mailach w bazie
-    const { data: notifications, error: notificationError } = await supabase
-      .from('email_notifications')
-      .insert([
+    try {
+      // Przygotuj dane dla szablonu
+      const templateData = {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        start_date: data.startDate,
+        start_time: data.startTime || '08:00',
+        end_date: data.endDate,
+        end_time: data.endTime || '16:00',
+        days: data.days,
+        equipment: data.equipment,
+        total_price: data.totalPrice,
+        deposit: data.deposit
+      };
+
+      // Wyślij email do klienta
+      await sendTemplateEmail({
+        recipientEmail: data.email,
+        subject: emailTemplates.newReservation.subject,
+        htmlContent: emailTemplates.newReservation.htmlContent,
+        templateData
+      });
+
+      // Wyślij email do administratora
+      await sendTemplateEmail({
+        recipientEmail: 'biuro@solrent.pl',
+        subject: `Nowa rezerwacja: ${data.firstName} ${data.lastName}`,
+        htmlContent: emailTemplates.newReservation.htmlContent,
+        templateData
+      });
+
+      console.log('Emaile z rezerwacją wysłane pomyślnie');
+
+      // Zapisz informację o wysłanych mailach
+      await supabase.from('email_notifications').insert([
         {
           recipient: data.email,
           type: 'customer',
-          status: 'pending',
+          status: 'sent',
           priority: 'high'
         },
         {
           recipient: 'biuro@solrent.pl',
           type: 'admin',
-          status: 'pending',
+          status: 'sent',
           priority: 'high'
         }
-      ])
-      .select();
-
-    if (notificationError) throw notificationError;
-
-    // Wywołaj funkcję Edge Function do wysłania maili
-    const { error: rpcError } = await supabase.rpc('send_reservation_emails', {
-      p_customer_email: data.email,
-      p_admin_email: 'biuro@solrent.pl',
-      p_data: data,
-      p_notification_ids: notifications.map(n => n.id)
-    });
-
-    if (rpcError) throw rpcError;
+      ]);
+    } catch (error) {
+      console.error('Błąd podczas wysyłania emaili:', error);
+      throw error;
+    }
   }, 3, 1000); // 3 próby, zaczynając od 1 sekundy
 };
