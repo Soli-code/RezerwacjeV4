@@ -91,21 +91,6 @@ function App() {
             </div>
           } />
         </Routes>
-        <div className="fixed bottom-4 right-4 bg-white p-3 rounded-lg shadow-lg border border-gray-200">
-          {isLoading ? (
-            <p className="text-gray-600">
-              <span className="inline-block animate-spin mr-2">⭮</span>
-              Sprawdzanie połączenia z bazą danych...
-            </p>
-          ) : (
-            <p className="flex items-center gap-2">
-              Status połączenia z bazą: {' '}
-              <span className={`px-2 py-1 rounded ${isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {isConnected ? '✓ Połączono' : '✕ Brak połączenia'}
-              </span>
-            </p>
-          )}
-        </div>
       </div>
     </Router>
   );
