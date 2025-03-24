@@ -1,11 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import pkg from 'node-fetch';
+const { default: fetch } = pkg;
 
 // Dane konfiguracyjne Supabase
 const SUPABASE_URL = 'https://klumxeclllfauamqnrckf.supabase.co';
 const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsdW14ZWNsbGZhdWFtcW5yY2tmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTY0NzI3NSwiZXhwIjoyMDU3MjIzMjc1fQ.24k0Ssu_Gve-lqgN4HOlcqhvKYY_njvs3oz6Xkl5N_o';
 
 // Utwórz klienta Supabase z Service Role (pełne uprawnienia)
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+  global: {
+    fetch: fetch
+  }
+});
 
 // Funkcja naprawiająca strukturę tabeli profiles
 async function fixProfilesTable() {
@@ -185,7 +191,73 @@ async function fixProfilesTable() {
       console.error('Błąd podczas tworzenia polityki dla admin_actions:', actionsPolicyError);
     }
     
-    // 10. Nadaj uprawnienia dla użytkowników
+    // 10. Naprawianie problemów z kontem biuro@solrent.pl
+    console.log('Naprawianie problemów z kontem biuro@solrent.pl...');
+    
+    // Znajdź użytkownika po emailu
+    const { data: user, error: userError } = await supabase.auth.admin.listUsers();
+    
+    if (userError) {
+      console.error('Błąd podczas wyszukiwania użytkownika:', userError);
+    } else {
+      console.log('Lista użytkowników:', user);
+      
+      // Znajdź użytkownika po emailu
+      const targetUser = user.users.find(u => u.email === 'biuro@solrent.pl');
+      
+      if (targetUser) {
+        console.log('Znaleziono użytkownika:', targetUser);
+        
+        // Upewnij się, że profil istnieje
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', targetUser.id)
+          .single();
+        
+        if (profileError) {
+          console.log('Profil nie istnieje, tworzę nowy...');
+          
+          // Utwórz profil jeśli nie istnieje
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: targetUser.id,
+              email: targetUser.email,
+              is_admin: true,
+              updated_at: new Date().toISOString()
+            });
+          
+          if (insertError) {
+            console.error('Błąd podczas tworzenia profilu:', insertError);
+          } else {
+            console.log('Profil utworzony pomyślnie');
+          }
+        } else {
+          console.log('Profil istnieje, aktualizuję...');
+          
+          // Aktualizuj profil
+          const { error: updateProfileError } = await supabase
+            .from('profiles')
+            .update({
+              is_admin: true,
+              email: targetUser.email,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', targetUser.id);
+          
+          if (updateProfileError) {
+            console.error('Błąd podczas aktualizacji profilu:', updateProfileError);
+          } else {
+            console.log('Profil zaktualizowany pomyślnie');
+          }
+        }
+      } else {
+        console.log('Nie znaleziono użytkownika biuro@solrent.pl');
+      }
+    }
+    
+    // 11. Nadaj uprawnienia dla użytkowników
     console.log('Nadaję uprawnienia dla użytkowników...');
     const { error: grantError1 } = await supabase.rpc(
       'test_query',
@@ -214,7 +286,7 @@ async function fixProfilesTable() {
       console.error('Błąd podczas nadawania uprawnień (3):', grantError3);
     }
     
-    // 11. Sprawdź profile administratorów
+    // 12. Sprawdź profile administratorów
     console.log('Sprawdzam profile administratorów...');
     const { data: profiles, error: profilesError } = await supabase.rpc(
       'test_query',

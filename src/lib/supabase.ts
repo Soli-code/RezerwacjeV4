@@ -21,7 +21,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     // Zwiększ timeout na operacje
     fetch: (url, options = {}) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 sekund timeout zamiast domyślnych 6
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // Zwiększono z 30s do 60s
       
       return fetch(url, {
         ...options,
@@ -48,7 +48,7 @@ let isConnected = false;
 // Funkcja z retries do wykonywania zapytań Supabase
 export const supabaseRequestWithRetry = async <T>(
   requestFunction: () => Promise<T>,
-  maxRetries = 3,
+  maxRetries = 5, // Zwiększono z 3 do 5
   initialDelay = 1000
 ): Promise<T> => {
   let lastError: any = null;
@@ -83,11 +83,9 @@ export const supabaseRequestWithRetry = async <T>(
 export const checkIsAdmin = async () => {
   try {
     // Pobierz aktualnego użytkownika
-    let userResponse;
-    try {
-      userResponse = await supabaseRequestWithRetry(() => supabase.auth.getUser());
-    } catch (error) {
-      console.error('Błąd pobierania użytkownika:', error);
+    const userResponse = await supabase.auth.getUser();
+    if (userResponse.error) {
+      console.error('Błąd pobierania użytkownika:', userResponse.error);
       return false;
     }
     
@@ -95,21 +93,18 @@ export const checkIsAdmin = async () => {
     if (!user) return false;
 
     // Sprawdź uprawnienia administratora
-    let profileResponse;
-    try {
-      profileResponse = await supabaseRequestWithRetry(() => 
-        supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single()
-      );
-    } catch (error) {
-      console.error('Błąd pobierania profilu:', error);
+    const profileResponse = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    
+    if (profileResponse.error) {
+      console.error('Błąd pobierania profilu:', profileResponse.error);
       return false;
     }
     
-    return profileResponse?.data?.is_admin || false;
+    return profileResponse.data?.is_admin || false;
   } catch (error) {
     console.error('Błąd podczas sprawdzania uprawnień administratora:', error);
     return false;
@@ -119,22 +114,52 @@ export const checkIsAdmin = async () => {
 // Helper do sprawdzania stanu połączenia
 export const checkSupabaseConnection = async () => {
   try {
-    // Próba prostego zapytania
-    let response;
-    try {
-      response = await supabaseRequestWithRetry(() => 
-        supabase.from('profiles').select('id').limit(1)
-      );
-    } catch (error) {
-      console.error('Błąd pobierania profili:', error);
+    // Ustaw timeout 10 sekund dla zapytania (zwiększone z 5 sekund)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    // Próba prostego zapytania - poprawiona wersja z prawidłową obsługą typów
+    const response = await supabase
+      .from('profiles')
+      .select('id')
+      .limit(1)
+      .abortSignal(controller.signal);
+    
+    clearTimeout(timeoutId);
+    
+    if (response.error) {
+      console.error('Błąd połączenia z Supabase:', response.error);
+      
+      // Dodatkowe logowanie szczegółów błędu
+      console.error('Status błędu:', response.status);
+      console.error('Kod błędu:', response.error.code);
+      console.error('Szczegóły błędu:', response.error.details);
+      
+      if (response.error.message.includes('querying schema')) {
+        console.error('Problem z dostępem do schematu bazy danych');
+      } else if (response.error.message.includes('network error')) {
+        console.error('Problem z siecią - brak połączenia internetowego');
+      }
       isConnected = false;
       return false;
     }
     
+    console.log('Połączenie z Supabase działa prawidłowo');
     isConnected = true;
     return true;
   } catch (error) {
-    console.error('Błąd połączenia z Supabase:', error);
+    console.error('Wyjątek podczas sprawdzania połączenia z Supabase:', error);
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      console.error('Przekroczono limit czasu oczekiwania na odpowiedź serwera');
+    }
+    
+    // Dodatkowe logowanie dla innych typów błędów
+    if (error instanceof Error) {
+      console.error('Nazwa błędu:', error.name);
+      console.error('Wiadomość błędu:', error.message);
+      console.error('Stos wywołań:', error.stack);
+    }
+    
     isConnected = false;
     return false;
   }

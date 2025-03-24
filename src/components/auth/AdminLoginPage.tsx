@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, supabaseRequestWithRetry, checkSupabaseConnection } from '../../lib/supabase';
+import { checkIsAdmin } from '../../lib/auth';
 import LoginForm from './LoginForm';
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -72,19 +73,27 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
     setIsLoading(true);
     
     try {
+      // Sprawdźmy najpierw połączenie z bazą danych przed próbą logowania
+      const connectionCheck = await checkSupabaseConnection();
+      if (!connectionCheck) {
+        throw new Error('Problem z połączeniem do bazy danych. Sprawdź połączenie internetowe i spróbuj ponownie za chwilę.');
+      }
+      
       // Logowanie bezpośrednio przez AuthAPI
       let response;
       try {
-        response = await supabase.auth.signInWithPassword({
+        response = await supabaseRequestWithRetry(() => supabase.auth.signInWithPassword({
           email,
           password
-        });
+        }));
       } catch (loginError: any) {
         console.error('Błąd logowania:', loginError);
         
         // Obsługa specyficznych błędów autoryzacji
-        if (loginError.message?.includes('Database error: querying schema')) {
-          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        if (loginError.message?.includes('Database error') || 
+            loginError.message?.includes('querying schema') || 
+            loginError.message?.includes('Internal Server Error')) {
+          throw new Error('Problem z połączeniem do bazy danych. Spróbuj ponownie za chwilę.');
         }
         
         throw loginError;
@@ -94,8 +103,15 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
       
       if (signInError) {
         // Obsługa specyficznych błędów autoryzacji
-        if (signInError.message?.includes('Database error: querying schema')) {
-          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        if (signInError.message?.includes('Database error') ||
+            signInError.message?.includes('querying schema') ||
+            signInError.message?.includes('Internal Server Error')) {
+          throw new Error('Problem z połączeniem do bazy danych. Spróbuj ponownie za chwilę.');
+        }
+        
+        // Jeśli to błąd nieznalezienia użytkownika, przedstawiamy bardziej przyjazny komunikat
+        if (signInError.message?.includes('Invalid login credentials')) {
+          throw new Error('Nieprawidłowy email lub hasło. Sprawdź dane i spróbuj ponownie.');
         }
         
         throw signInError;
@@ -105,78 +121,54 @@ const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLogin }) => {
       if (!user) throw new Error('Nie znaleziono użytkownika');
 
       // Sprawdź czy użytkownik jest administratorem
-      let profileResponse;
       try {
-        profileResponse = await supabase
-          .from('profiles')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single();
-      } catch (profileError: any) {
-        console.error('Błąd pobierania profilu:', profileError);
+        const isAdmin = await checkIsAdmin();
+        if (!isAdmin) {
+          // Wyloguj użytkownika, jeśli nie jest administratorem
+          await supabase.auth.signOut();
+          throw new Error('Brak uprawnień administratora. Skontaktuj się z administratorem systemu.');
+        }
+      } catch (adminCheckError: any) {
+        console.error('Błąd sprawdzania uprawnień administratora:', adminCheckError);
         
-        // Obsługa specyficznych błędów profilu
-        if (profileError.message?.includes('Database error: querying schema')) {
-          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
+        // Wyloguj użytkownika w przypadku błędu
+        await supabase.auth.signOut();
+        
+        // Obsługa konkretnych błędów związanych z bazą danych
+        if (adminCheckError.message?.includes('Database error') || 
+            adminCheckError.message?.includes('querying schema') || 
+            adminCheckError.message?.includes('Internal Server Error')) {
+          throw new Error('Problem z połączeniem do bazy danych. Spróbuj ponownie za chwilę.');
         }
         
-        throw new Error('Błąd podczas weryfikacji uprawnień administratora');
+        throw new Error('Problem z weryfikacją uprawnień. Spróbuj ponownie później.');
       }
       
-      const { data: profile, error: profileError } = profileResponse;
-      
-      if (profileError) {
-        // Obsługa specyficznych błędów profilu
-        if (profileError.message?.includes('Database error: querying schema')) {
-          throw new Error('Błąd bazy danych. Problem z uprawnieniami lub połączeniem do bazy.');
-        }
-        
-        throw profileError;
-      }
-      
-      if (!profile?.is_admin) {
-        throw new Error('Brak uprawnień administratora');
-      }
-
-      // Jeśli logowanie udane, wyczyść licznik prób
+      // Resetuj licznik prób
       setLoginAttempts(0);
-      localStorage.removeItem('adminLoginLockout');
-
-      try {
-        // Zapisz timestamp ostatniego udanego logowania
-        await supabase
-          .from('admin_actions')
-          .insert({
-            action_type: 'login',
-            action_details: {
-              email: email,
-              timestamp: new Date().toISOString()
-            }
-          });
-      } catch (historyError) {
-        // Ignoruj błędy zapisu historii - to nie powinno przerywać logowania
-        console.warn('Nie udało się zapisać historii logowania:', historyError);
-      }
-
+      
+      // Przekieruj do panelu administratora
       onLogin();
-    } catch (error) {
-      console.error('Login error:', error);
-      if (error instanceof Error) {
-        setError(
-          error.message === 'Invalid login credentials' 
-            ? 'Nieprawidłowe dane logowania'
-            : error.message === 'Brak uprawnień administratora'
-            ? 'Brak uprawnień administratora'
-            : error.message.includes('Failed to fetch') || error.message.includes('fetch failed')
-            ? 'Problem z połączeniem z serwerem. Sprawdź połączenie internetowe.'
-            : error.message.includes('Database error')
-            ? 'Błąd bazy danych. Skontaktuj się z administratorem systemu.'
-            : 'Wystąpił nieoczekiwany błąd: ' + error.message
-        );
-      } else {
-        setError('Wystąpił nieoczekiwany błąd');
+    } catch (error: any) {
+      console.error('Błąd podczas logowania:', error);
+      
+      // Dodatkowa obsługa specyficznych błędów
+      let errorMessage = error.message || 'Wystąpił błąd podczas logowania. Spróbuj ponownie.';
+      
+      // Obsługa błędów związanych z bazą danych
+      if (errorMessage.includes('Database error') || 
+          errorMessage.includes('querying schema') || 
+          errorMessage.includes('Internal Server Error')) {
+        errorMessage = 'Problem z połączeniem do bazy danych. Spróbuj ponownie za chwilę.';
       }
-      handleLoginFailure();
+
+      // Inkrementuj licznik prób tylko dla błędów uwierzytelniania, nie dla problemów z połączeniem
+      if (errorMessage.includes('Nieprawidłowy email lub hasło')) {
+        handleLoginFailure();
+      }
+      
+      // Ustaw komunikat błędu
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
