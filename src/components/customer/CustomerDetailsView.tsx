@@ -102,6 +102,7 @@ interface CustomerDetails {
 }
 
 interface CustomerUpdateData {
+  id?: string; // Dodajemy opcjonalne pole id
   first_name: string;
   last_name: string;
   email: string;
@@ -111,6 +112,7 @@ interface CustomerUpdateData {
   street?: string;
   city?: string;
   postal_code?: string;
+  notes?: string; // Dodajemy opcjonalne pole notatek
 }
 
 // Aktualizacja interfejsu dla editedDetails
@@ -224,8 +226,9 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
   const [editedDetails, setEditedDetails] = useState<EditedDetails>({
     start_date: '',
     end_date: '',
-    start_time: '08:00',
-    end_time: '18:00'
+    start_time: '',
+    end_time: '',
+    status: ''
   });
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<Array<{
@@ -261,18 +264,11 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     phone: string;
   }>>([]);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [editedCustomer, setEditedCustomer] = useState({
-    id: '',
+  const [editedCustomer, setEditedCustomer] = useState<CustomerUpdateData>({
     first_name: '',
     last_name: '',
     email: '',
-    phone: '',
-    company_name: '',
-    company_nip: '',
-    street: '',
-    city: '',
-    postal_code: '',
-    notes: ''
+    phone: ''
   });
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
@@ -320,6 +316,22 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
   // Na początku komponentu dodaję zmienną stanu dla komunikatu sukcesu
   const [successMessage, setSuccessMessage] = useState<string>('');
 
+  // Dodajemy brakujące stany dla edytowanego sprzętu i usług
+  const [editedEquipment, setEditedEquipment] = useState<Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+    deposit?: number;
+  }>>([]);
+  
+  const [editedServices, setEditedServices] = useState<Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }>>([]);
+
   useEffect(() => {
     loadCustomerDetails();
     loadComments();
@@ -332,7 +344,8 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0],
         start_time: startDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        end_time: endDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false })
+        end_time: endDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        status: details.status
       });
       
       // Sprawdzamy, czy klient ma dane firmowe
@@ -350,7 +363,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         street: details.customer.street || '',
         city: details.customer.city || '',
         postal_code: details.customer.postal_code || '',
-        notes: ''
+        notes: editedCustomer.notes
       });
       
       // Set selected equipment
@@ -376,7 +389,8 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0],
         start_time: startDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        end_time: endDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false })
+        end_time: endDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        status: details.status
       });
       
       // Sprawdzamy, czy klient ma dane firmowe
@@ -394,7 +408,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         street: details.customer.street || '',
         city: details.customer.city || '',
         postal_code: details.customer.postal_code || '',
-        notes: ''
+        notes: editedCustomer.notes
       });
     }
   }, [details]);
@@ -536,6 +550,18 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         });
         
         setAdditionalServices(updatedServices);
+        
+        // Aktualizuj również editedServices po zmianie ilości
+        const updatedEditedServices = updatedServices
+          .filter(service => service.quantity > 0)
+          .map(service => ({
+            id: service.id,
+            name: service.name,
+            quantity: service.quantity,
+            price: service.price
+          }));
+        
+        setEditedServices(updatedEditedServices);
         setShowConfirmDialog(false);
       });
       setShowConfirmDialog(true);
@@ -551,6 +577,18 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     });
     
     setAdditionalServices(updatedServices);
+    
+    // Aktualizuj również editedServices po zmianie ilości
+    const updatedEditedServices = updatedServices
+      .filter(service => service.quantity > 0)
+      .map(service => ({
+        id: service.id,
+        name: service.name,
+        quantity: service.quantity,
+        price: service.price
+      }));
+    
+    setEditedServices(updatedEditedServices);
   };
   
   const handleSelectCustomer = (customer: any) => {
@@ -801,8 +839,45 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }
   };
 
+  const validateTimes = (startDate: string, endDate: string, startTime: string, endTime: string): boolean => {
+    // Sprawdź czy daty i godziny są prawidłowe
+    const start = new Date(`${startDate}T${startTime}`);
+    const end = new Date(`${endDate}T${endTime}`);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return false;
+    }
+    
+    const isStartSaturday = new Date(startDate).getDay() === 6;
+    const isEndSaturday = new Date(endDate).getDay() === 6;
+    
+    const startHour = parseInt(startTime.split(':')[0], 10);
+    const endHour = parseInt(endTime.split(':')[0], 10);
+    
+    // Sprawdź godziny dla soboty (8:00-13:00)
+    if (isStartSaturday && (startHour < 8 || startHour > 13)) {
+      return false;
+    }
+    
+    if (isEndSaturday && (endHour < 8 || endHour > 13)) {
+      return false;
+    }
+    
+    // Sprawdź godziny dla dni roboczych (8:00-16:00)
+    if (!isStartSaturday && (startHour < 8 || startHour > 16)) {
+      return false;
+    }
+    
+    if (!isEndSaturday && (endHour < 8 || endHour > 16)) {
+      return false;
+    }
+    
+    // Sprawdź czy data końcowa jest późniejsza od daty początkowej
+    return end > start;
+  };
+
   const handleSaveChanges = async () => {
-    if (!details || !editMode) {
+    if (!details) {
       return;
     }
     
@@ -813,21 +888,130 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
       return;
     }
     
-    // Walidacja godzin
-    const startTime = editedDetails.start_time.split(':').map(Number);
-    const endTime = editedDetails.end_time.split(':').map(Number);
-    const startDate = new Date(editedDetails.start_date);
-    const endDate = new Date(editedDetails.end_date);
-    const isSaturday = startDate.getDay() === 6 || endDate.getDay() === 6;
-    
-    // Sprawdzenie czy godziny są w dozwolonym zakresie
-    if (startTime[0] < 8 || (isSaturday && startTime[0] >= 13) || (!isSaturday && startTime[0] >= 16)) {
-      alert('Godziny rozpoczęcia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
+    // Jeśli tryb edycji nie jest włączony, ale są usługi dodatkowe do zapisania,
+    // zapisz tylko usługi dodatkowe bez sprawdzania innych danych
+    if (!editMode && hasAdditionalServicesToSave()) {
+      setSubmitting(true);
+      
+      try {
+        // Najpierw sprawdź, czy tabela istnieje
+        const { data: tableCheck, error: tableError } = await supabase
+          .from('reservation_additional_services')
+          .select('id')
+          .limit(1);
+        
+        if (tableError) {
+          console.error('Tabela usług dodatkowych nie istnieje:', tableError);
+          alert('Nie można zapisać usług dodatkowych, ponieważ tabela w bazie danych nie istnieje. Skontaktuj się z administratorem.');
+          setSubmitting(false);
       return;
     }
     
-    if (endTime[0] < 8 || (isSaturday && endTime[0] > 13) || (!isSaturday && endTime[0] > 16)) {
-      alert('Godziny zakończenia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
+        let hasErrors = false;
+        
+        // KROK 1: Aktualizacja usług dodatkowych
+        const servicesToSave = additionalServices.filter(service => service.quantity > 0);
+        
+        // Pobierz istniejące usługi
+        const { data: existingServices, error: getServicesError } = await supabase
+          .from('reservation_additional_services')
+          .select('*')
+          .eq('reservation_id', id);
+          
+        if (getServicesError) {
+          console.error('Błąd pobierania usług dodatkowych:', getServicesError);
+          hasErrors = true;
+        } else {
+          // Usuń wszystkie istniejące usługi, które nie są na liście do zapisania lub mają ilość 0
+          if (existingServices && existingServices.length > 0) {
+            // Usuwanie usług, które nie są w bieżącym zestawie do zapisania
+            const servicesToKeepIds = servicesToSave.map(s => s.id);
+            const servicesToRemove = existingServices.filter(service => 
+              !servicesToKeepIds.includes(service.service_id)
+            );
+            
+            if (servicesToRemove.length > 0) {
+              console.log('Usuwanie usług:', servicesToRemove.map(s => s.service_id));
+              const { error: deleteError } = await supabase
+                .from('reservation_additional_services')
+                .delete()
+                .in('id', servicesToRemove.map(service => service.id));
+                
+              if (deleteError) {
+                console.error('Błąd usuwania nieużywanych usług:', deleteError);
+                hasErrors = true;
+              }
+            }
+          }
+          
+          // Dla każdej usługi z dodatnią ilością
+          for (const service of servicesToSave) {
+            // Sprawdź czy usługa już istnieje
+            const existingService = existingServices?.find(s => s.service_id === service.id);
+            
+            if (existingService) {
+              // Aktualizuj istniejącą usługę
+              const { error: updateServiceError } = await supabase
+                .from('reservation_additional_services')
+                .update({
+                  quantity: service.quantity,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingService.id);
+              
+              if (updateServiceError) {
+                console.error('Błąd aktualizacji usługi dodatkowej:', updateServiceError);
+                hasErrors = true;
+              }
+            } else {
+              // Dodaj nową usługę
+              const { error: insertServiceError } = await supabase
+                .from('reservation_additional_services')
+                .insert({
+                  reservation_id: id,
+                  service_id: service.id,
+                  quantity: service.quantity,
+                  price: service.price,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+              
+              if (insertServiceError) {
+                console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
+                hasErrors = true;
+              }
+            }
+          }
+        }
+        
+        // Odśwież dane
+        await loadCustomerDetails();
+        await loadAdditionalServices();
+        
+        if (!hasErrors) {
+          alert('Usługi dodatkowe zostały zapisane.');
+        } else {
+          alert('Wystąpiły problemy podczas zapisywania usług dodatkowych. Sprawdź logi w konsoli.');
+        }
+      } catch (error) {
+        console.error('Nieoczekiwany błąd podczas zapisywania usług dodatkowych:', error);
+        alert('Wystąpił nieoczekiwany błąd podczas zapisywania usług dodatkowych.');
+      } finally {
+        setSubmitting(false);
+      }
+      
+      return;
+    }
+    
+    // Kontynuuj normalne zapisywanie, jeśli tryb edycji jest włączony
+    // Walidacja godzin
+    if (!validateTimes(
+      editedDetails.start_date,
+      editedDetails.end_date,
+      editedDetails.start_time,
+      editedDetails.end_time
+    )) {
+      alert('Nieprawidłowe daty lub godziny. Sprawdź czy godziny są w zakresie 8:00-16:00 dla dni roboczych lub 8:00-13:00 dla sobót.');
       return;
     }
     
@@ -841,7 +1025,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         return;
       }
       
-      console.log('ID rezerwacji:', id);
+      console.log('Zapisywanie rezerwacji ID:', id);
       
       // Sprawdź, czy dane klienta są poprawne
       if (!editedCustomer.id) {
@@ -862,192 +1046,258 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
       }
       
       // KROK 1: Aktualizacja danych rezerwacji
-      let updateSuccess = true;
       try {
-        const result = await supabaseRequestWithRetry(async () => {
-          return await supabase
+        const { error: reservationError } = await supabase
             .from('reservations')
             .update({
               start_date: editedDetails.start_date,
               end_date: editedDetails.end_date,
               start_time: editedDetails.start_time,
               end_time: editedDetails.end_time,
-              status: editedDetails.status || (details ? details.status : 'pending')
+            status: editedDetails.status || (details ? details.status : 'pending'),
+            updated_at: new Date().toISOString()
             })
             .eq('id', id);
-        });
         
-        if (result.error) {
-          console.error('Błąd aktualizacji rezerwacji:', result.error);
-          alert(`Nie udało się zaktualizować rezerwacji: ${result.error.message}`);
-          updateSuccess = false;
+        if (reservationError) {
+          console.error('Błąd aktualizacji rezerwacji:', reservationError);
+          alert(`Nie udało się zaktualizować rezerwacji: ${reservationError.message}`);
           hasErrors = true;
+        } else {
+          console.log('Rezerwacja zaktualizowana pomyślnie');
         }
       } catch (reservationError) {
         console.error('Wyjątek podczas aktualizacji rezerwacji:', reservationError);
-        updateSuccess = false;
         hasErrors = true;
       }
       
-      // KROK 2: Aktualizacja danych klienta (niezależnie od kroku 1)
-      let customerSuccess = true;
-      if (editedCustomer.id) {
-        try {
-          // Przygotuj dane klienta do aktualizacji z minimalnymi polami
-          // w przypadku gdy niektóre kolumny nie istnieją
-          const customerBasicData = {
+      // KROK 2: Aktualizacja danych klienta
+      try {
+        const { error: customerError } = await supabase
+          .from('customers')
+          .update({
             first_name: editedCustomer.first_name,
             last_name: editedCustomer.last_name,
             email: editedCustomer.email,
-            phone: editedCustomer.phone
-          };
-          
-          // Najpierw spróbuj zaktualizować podstawowe dane
-          const { error: basicUpdateError } = await supabase
-            .from('customers')
-            .update(customerBasicData)
+            phone: editedCustomer.phone,
+            company_name: editedCustomer.company_name || null,
+            company_nip: editedCustomer.company_nip || null,
+            street: editedCustomer.street || null,
+            city: editedCustomer.city || null,
+            postal_code: editedCustomer.postal_code || null,
+            updated_at: new Date().toISOString()
+          })
             .eq('id', editedCustomer.id);
             
-          if (basicUpdateError) {
-            console.error('Błąd aktualizacji podstawowych danych klienta:', basicUpdateError);
-            customerSuccess = false;
+        if (customerError) {
+          console.error('Błąd aktualizacji klienta:', customerError);
             hasErrors = true;
           } else {
-            // Podstawowa aktualizacja się powiodła, spróbuj zaktualizować dane firmowe/adresowe
-            // jako osobne zapytania, żeby w przypadku braku kolumn tylko te części się nie powiodły
+          console.log('Dane klienta zaktualizowane pomyślnie');
+        }
+      } catch (customerError) {
+        console.error('Wyjątek podczas aktualizacji klienta:', customerError);
+        hasErrors = true;
+      }
+      
+      // KROK 3: Aktualizacja elementów rezerwacji (sprzęt)
+      if (editedEquipment.length > 0) {
+        // Najpierw pobierz istniejące elementy
+        const { data: existingItems, error: getItemsError } = await supabase
+          .from('reservation_items')
+          .select('id, equipment_id')
+          .eq('reservation_id', id);
+        
+        if (getItemsError) {
+          console.error('Błąd pobierania elementów rezerwacji:', getItemsError);
+          hasErrors = true;
+        } else {
+          // Usuń elementy, które nie są już na liście
+          const existingIds = new Set(existingItems.map(item => item.equipment_id));
+          const newIds = new Set(editedEquipment.map(item => item.id));
+          
+          // Elementy do usunięcia
+          const itemsToRemove = existingItems.filter(item => !newIds.has(item.equipment_id));
+          
+          if (itemsToRemove.length > 0) {
+            const { error: deleteItemsError } = await supabase
+              .from('reservation_items')
+              .delete()
+              .in('id', itemsToRemove.map(item => item.id));
             
-            // Aktualizacja danych firmowych
-            try {
-              const companyData = {
-                company_name: editedCustomer.company_name || null,
-                company_nip: editedCustomer.company_nip || null
-              };
-              
-              const { error: companyUpdateError } = await supabase
-                .from('customers')
-                .update(companyData)
-                .eq('id', editedCustomer.id);
-                
-              if (companyUpdateError) {
-                console.warn('Błąd aktualizacji danych firmowych:', companyUpdateError);
-              }
-            } catch (companyError) {
-              console.warn('Wyjątek podczas aktualizacji danych firmowych:', companyError);
-            }
-            
-            // Aktualizacja danych adresowych
-            try {
-              const addressData = {
-                street: editedCustomer.street || null,
-                city: editedCustomer.city || null,
-                postal_code: editedCustomer.postal_code || null
-              };
-              
-              const { error: addressUpdateError } = await supabase
-                .from('customers')
-                .update(addressData)
-                .eq('id', editedCustomer.id);
-                
-              if (addressUpdateError) {
-                console.warn('Błąd aktualizacji danych adresowych (prawdopodobnie brak kolumn):', addressUpdateError);
-              }
-            } catch (addressError) {
-              console.warn('Wyjątek podczas aktualizacji danych adresowych:', addressError);
+            if (deleteItemsError) {
+              console.error('Błąd usuwania elementów rezerwacji:', deleteItemsError);
+              hasErrors = true;
             }
           }
-        } catch (customerError) {
-          console.error('Wyjątek podczas aktualizacji klienta:', customerError);
-          customerSuccess = false;
+          
+          // Dodaj nowe elementy lub zaktualizuj istniejące
+          for (const equipment of editedEquipment) {
+            if (existingIds.has(equipment.id)) {
+              // Zaktualizuj istniejący element
+              const existingItem = existingItems.find(item => item.equipment_id === equipment.id);
+              
+              if (existingItem) {
+                const { error: updateItemError } = await supabase
+                  .from('reservation_items')
+                  .update({
+                    quantity: equipment.quantity,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', existingItem.id);
+                
+                if (updateItemError) {
+                  console.error('Błąd aktualizacji elementu rezerwacji:', updateItemError);
+                  hasErrors = true;
+                }
+              } else {
+                console.warn(`Nie znaleziono elementu rezerwacji dla sprzętu ${equipment.id}, tworzę nowy`);
+                // Jeśli element nie został znaleziony, dodajemy go jako nowy
+                const { error: insertItemError } = await supabase
+                  .from('reservation_items')
+                  .insert({
+                    reservation_id: id,
+                    equipment_id: equipment.id,
+                    quantity: equipment.quantity,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  });
+                
+                if (insertItemError) {
+                  console.error('Błąd dodawania elementu rezerwacji:', insertItemError);
+                  hasErrors = true;
+                }
+              }
+            } else {
+              // Dodaj nowy element
+              const { error: insertItemError } = await supabase
+                .from('reservation_items')
+                .insert({
+                  reservation_id: id,
+                  equipment_id: equipment.id,
+                  quantity: equipment.quantity,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+              
+              if (insertItemError) {
+                console.error('Błąd dodawania elementu rezerwacji:', insertItemError);
           hasErrors = true;
+              }
+            }
+          }
         }
       }
       
-      // KROK 3: Aktualizacja usług dodatkowych (niezależnie od poprzednich kroków)
-      let additionalServicesSuccess = true;
-      try {
-        const servicesToUpdate = additionalServices.filter(s => s.quantity > 0);
-        if (servicesToUpdate.length > 0) {
-          // Sprawdź najpierw, czy tabela istnieje
-          const { error: tableCheckError } = await supabase
+      // KROK 4: Aktualizacja usług dodatkowych
+      const servicesToSave = additionalServices.filter(service => service.quantity > 0);
+      
+      if (servicesToSave.length > 0) {
+        // Najpierw pobierz istniejące usługi
+        const { data: existingServices, error: getServicesError } = await supabase
             .from('reservation_additional_services')
-            .select('id')
-            .limit(1);
-            
-          // Jeśli tabela nie istnieje, po prostu pomijamy tę część
-          if (tableCheckError) {
-            console.warn('Tabela usług dodatkowych nie istnieje, pomijam aktualizację:', tableCheckError);
+          .select('id, service_id')
+          .eq('reservation_id', id);
+        
+        if (getServicesError) {
+          console.error('Błąd pobierania usług dodatkowych:', getServicesError);
+          hasErrors = true;
           } else {
-            // Tabela istnieje, możemy kontynuować
-            for (const service of servicesToUpdate) {
-              try {
-                // Sprawdź, czy usługa już istnieje
-                const { data: existingService, error: checkError } = await supabase
+          // Usuń usługi, które nie są już na liście lub mają ilość 0
+          const existingServiceIds = existingServices ? new Set(existingServices.map(s => s.service_id)) : new Set();
+          const newServiceIds = new Set(servicesToSave.map(s => s.id));
+          
+          // Usługi do usunięcia
+          if (existingServices && existingServices.length > 0) {
+            const servicesToRemove = existingServices.filter(service => !newServiceIds.has(service.service_id));
+            
+            if (servicesToRemove.length > 0) {
+              const { error: deleteServicesError } = await supabase
                   .from('reservation_additional_services')
-                  .select('*')
-                  .eq('reservation_id', id)
-                  .eq('service_id', service.id)
-                  .maybeSingle();
-                
-                if (checkError) {
-                  console.warn('Błąd sprawdzania usług dodatkowych:', checkError);
-                  continue;
-                }
+                .delete()
+                .in('id', servicesToRemove.map(service => service.id));
+              
+              if (deleteServicesError) {
+                console.error('Błąd usuwania usług dodatkowych:', deleteServicesError);
+                hasErrors = true;
+              }
+            }
+          }
+          
+          // Dodaj nowe usługi lub zaktualizuj istniejące
+          for (const service of servicesToSave) {
+            if (existingServiceIds.has(service.id)) {
+              // Zaktualizuj istniejącą usługę
+              const existingService = existingServices?.find(s => s.service_id === service.id);
                 
                 if (existingService) {
-                  // Aktualizuj istniejącą usługę
-                  const { error: updateError } = await supabase
+                const { error: updateServiceError } = await supabase
                     .from('reservation_additional_services')
-                    .update({ quantity: service.quantity })
+                  .update({
+                    quantity: service.quantity,
+                    updated_at: new Date().toISOString()
+                  })
                     .eq('id', existingService.id);
                     
-                  if (updateError) {
-                    console.warn('Błąd aktualizacji usługi dodatkowej:', updateError);
+                if (updateServiceError) {
+                  console.error('Błąd aktualizacji usługi dodatkowej:', updateServiceError);
+                  hasErrors = true;
                   }
                 } else {
-                  // Dodaj nową usługę
-                  const { error: insertError } = await supabase
+                console.warn(`Nie znaleziono usługi dodatkowej dla ID ${service.id}, tworzę nową`);
+                // Jeśli usługa nie została znaleziona, dodajemy ją jako nową
+                const { error: insertServiceError } = await supabase
                     .from('reservation_additional_services')
                     .insert({
                       reservation_id: id,
                       service_id: service.id,
                       quantity: service.quantity,
-                      price: service.price
-                    });
-                    
-                  if (insertError) {
-                    console.warn('Błąd dodawania usługi dodatkowej:', insertError);
-                  }
+                    price: service.price,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  });
+                
+                if (insertServiceError) {
+                  console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
+                  hasErrors = true;
                 }
-              } catch (serviceError) {
-                console.warn('Błąd przy aktualizacji usługi dodatkowej:', serviceError);
+              }
+            } else {
+              // Dodaj nową usługę
+              const { error: insertServiceError } = await supabase
+                .from('reservation_additional_services')
+                .insert({
+                  reservation_id: id,
+                  service_id: service.id,
+                  quantity: service.quantity,
+                  price: service.price,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                });
+              
+              if (insertServiceError) {
+                console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
+                hasErrors = true;
               }
             }
           }
         }
-      } catch (additionalServicesError) {
-        console.warn('Błąd przy przetwarzaniu usług dodatkowych:', additionalServicesError);
-        additionalServicesSuccess = false;
-        // Nie ustawiamy hasErrors, bo błędy usług dodatkowych nie powinny blokować całości
       }
       
-      // Po zapisie odśwież dane
+      // Odśwież dane
       await loadCustomerDetails();
-      setEditMode(false);
+      await loadAdditionalServices();
       
-      // Wyświetl odpowiedni komunikat
-      if (hasErrors) {
-        setSuccessMessage('Zmiany zostały częściowo zapisane. Niektóre operacje nie powiodły się.');
+      // Wyświetl komunikat o wyniku operacji
+      if (!hasErrors) {
+        alert('Zmiany zostały zapisane pomyślnie.');
+        setEditMode(false);
       } else {
-        setSuccessMessage('Zmiany zostały zapisane pomyślnie.');
+        alert('Wystąpiły problemy podczas zapisywania zmian. Sprawdź logi w konsoli.');
       }
-      
-      // Ukryj komunikat po 3 sekundach
-      setTimeout(() => {
-        setSuccessMessage('');
-      }, 3000);
     } catch (error) {
-      console.error('Błąd podczas zapisywania zmian:', error);
-      alert(`Wystąpił błąd podczas zapisywania zmian: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Nieoczekiwany błąd podczas zapisywania zmian:', error);
+      alert('Wystąpił nieoczekiwany błąd podczas zapisywania zmian.');
     } finally {
       setSubmitting(false);
     }
@@ -1103,6 +1353,28 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
   // Funkcja ładująca usługi dodatkowe
   const loadAdditionalServices = async () => {
     try {
+      // Sprawdź, czy tabela istnieje, wykonując prostą operację
+      const { data: testData, error: testError } = await supabase
+        .from('reservation_additional_services')
+        .select('id')
+        .limit(1);
+        
+      if (testError) {
+        console.error('Tabela usług dodatkowych nie istnieje:', testError);
+        // Przywróć domyślne wartości dla usług
+        setAdditionalServices([
+          { id: 'gas', name: 'Butla gazowa', price: 50, quantity: 0 },
+          { id: 'vacuum', name: 'Odkurzacz do żyrafy', price: 25, quantity: 0 },
+          { id: 'powder', name: 'Proszek piorący Kärcher 100g', price: 10, quantity: 0 },
+          { id: 'scaffold', name: 'RUSZTOWANIE', price: 100, quantity: 0 },
+          { id: 'disc', name: 'Tarcza do gipsu', price: 15, quantity: 0 },
+          { id: 'drill152', name: 'Wiertło do wiertnicy 152 mm', price: 40, quantity: 0 },
+          { id: 'drill202', name: 'Wiertło do wiertnicy 202 mm', price: 80, quantity: 0 },
+          { id: 'drill82', name: 'Wiertło do wiertnicy 82, 112, 132 mm', price: 30, quantity: 0 }
+        ]);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('reservation_additional_services')
         .select('*')
@@ -1374,6 +1646,47 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }
     
     setEditedCustomer({...editedCustomer, company_nip: formattedNip});
+  };
+
+  const handleDateClick = async (date: Date | null): Promise<void> => {
+    // Implementacja funkcji
+    console.log(date);
+  };
+
+  // Funkcja sprawdzająca, czy są jakieś dodane usługi do zapisania
+  const hasAdditionalServicesToSave = () => {
+    // Sprawdź czy są jakiekolwiek usługi zapisane w bazie
+    const hasAnySavedServices = details?.additional_services && details.additional_services.length > 0;
+    
+    // Pobierz wszystkie usługi zapisane w bazie
+    const savedServicesIds = details?.additional_services?.map(s => s.id) || [];
+    
+    // 1. Sprawdź, czy są usługi do dodania/zaktualizowania (quantity > 0)
+    const hasServicesToAdd = additionalServices.some(service => service.quantity > 0);
+    
+    // 2. Sprawdź, czy są usługi do usunięcia (ilość = 0, ale istnieją w bazie)
+    const hasServicesToRemove = additionalServices.some(service => {
+      return service.quantity === 0 && savedServicesIds.includes(service.id);
+    });
+    
+    // 3. Sprawdź, czy są usługi, których ilość się zmieniła
+    const hasServicesQuantityChanged = details?.additional_services?.some(savedService => {
+      const currentService = additionalServices.find(s => s.id === savedService.id);
+      return currentService && currentService.quantity !== savedService.quantity;
+    }) || false;
+    
+    // 4. Specjalny przypadek - wszystkie usługi są na 0, ale w bazie są jakieś zapisane usługi
+    const allZeroButHasSavedServices = !hasServicesToAdd && hasAnySavedServices;
+    
+    console.log({
+      hasServicesToAdd,
+      hasServicesToRemove,
+      hasServicesQuantityChanged,
+      hasAnySavedServices,
+      allZeroButHasSavedServices
+    });
+    
+    return hasServicesToAdd || hasServicesToRemove || hasServicesQuantityChanged || allZeroButHasSavedServices;
   };
 
   if (loading) {
@@ -1783,111 +2096,10 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         <div className="lg:col-span-8 space-y-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Termin rezerwacji</h2>
-              <CalendarDays className="w-6 h-6 text-gray-400" />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div>
-                <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <CalendarDays className="w-4 h-4" /> Data rozpoczęcia
-                </label>
-                <input
-                  type="date"
-                  id="start_date"
-                  value={editedDetails.start_date}
-                  onChange={(e) => setEditedDetails({...editedDetails, start_date: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                  disabled={submitting || !editMode}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <Clock3 className="w-4 h-4" /> Godzina rozpoczęcia
-                </label>
-                <input
-                  type="time"
-                  id="start_time"
-                  value={editedDetails.start_time}
-                  onChange={(e) => {
-                    const time = e.target.value;
-                    const [hours] = time.split(':').map(Number);
-                    const selectedDate = new Date(editedDetails.start_date);
-                    const isSaturday = selectedDate.getDay() === 6;
-                    
-                    if (hours >= 8 && ((isSaturday && hours < 13) || (!isSaturday && hours < 16))) {
-                      setEditedDetails({...editedDetails, start_time: time});
-                    } else {
-                      alert('Godziny rozpoczęcia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
-                    }
-                  }}
-                  min="08:00"
-                  max={editedDetails.start_date && new Date(editedDetails.start_date).getDay() === 6 ? "13:00" : "16:00"}
-                  step="1800"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                  disabled={submitting || !editMode}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="end_date" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <CalendarDays className="w-4 h-4" /> Data zakończenia
-                </label>
-                <input
-                  type="date"
-                  id="end_date"
-                  value={editedDetails.end_date}
-                  onChange={(e) => setEditedDetails({...editedDetails, end_date: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                  disabled={submitting || !editMode}
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-                  <Clock3 className="w-4 h-4" /> Godzina zakończenia
-                </label>
-                <input
-                  type="time"
-                  id="end_time"
-                  value={editedDetails.end_time}
-                  onChange={(e) => {
-                    const time = e.target.value;
-                    const [hours] = time.split(':').map(Number);
-                    const selectedDate = new Date(editedDetails.end_date);
-                    const isSaturday = selectedDate.getDay() === 6;
-                    
-                    if (hours >= 8 && ((isSaturday && hours <= 13) || (!isSaturday && hours <= 16))) {
-                      setEditedDetails({...editedDetails, end_time: time});
-                    } else {
-                      alert('Godziny zakończenia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
-                    }
-                  }}
-                  min="08:00"
-                  max={editedDetails.end_date && new Date(editedDetails.end_date).getDay() === 6 ? "13:00" : "16:00"}
-                  step="1800"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                  disabled={submitting || !editMode}
-                />
-              </div>
-            </div>
-            
-            <div className="flex justify-end">
-              <button
-                onClick={handleSaveChanges}
-                disabled={submitting || !editedDetails.start_date || !editedDetails.end_date || !editMode}
-                className="px-4 py-2 bg-solrent-orange text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Zapisywanie...' : 'Zapisz zmiany'}
-              </button>
-            </div>
-          </div>
-          
-          {/* Formularz edycji szczegółów */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
               <h2 className="text-xl font-semibold text-gray-900">Szczegóły</h2>
+                <h2 className="text-xl font-semibold text-gray-900 ml-4 pl-4 border-l">Dane klienta</h2>
+              </div>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setEditMode(!editMode)}
@@ -1912,89 +2124,13 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
               </div>
             </div>
             
-            {/* Wybór produktu */}
-            <div className="mb-6">
-              <label htmlFor="product_search" className="block text-sm font-medium text-gray-700 mb-1">
-                Produkt
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="product_search"
-                  placeholder="Wyszukaj produkt..."
-                  value={searchTerm}
-                  onChange={handleEquipmentSearch}
-                  onFocus={() => setShowEquipmentList(true)}
-                  className="w-full px-3 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                
-                {showEquipmentList && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {availableEquipment
-                      .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map(item => (
-                        <div
-                          key={item.id}
-                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => handleAddEquipment(item)}
-                        >
-                          <div className="flex justify-between">
-                            <span>{item.name}</span>
-                            <span className="text-solrent-orange font-medium">{item.price} zł/dzień</span>
-                          </div>
-                        </div>
-                      ))}
-                    {availableEquipment.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-                      <div className="px-4 py-2 text-gray-500">Brak wyników</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              {/* Lista wybranych produktów */}
-              <div className="mt-4 space-y-3">
-                {selectedEquipment.map(item => (
-                  <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+            {/* Połączone sekcje terminu rezerwacji i szczegółów */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Dane klienta - lewa strona */}
                     <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-gray-600">{item.price} zł/dzień</p>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => handleQuantityChange(item.id, -1)}
-                        className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="w-6 text-center">{item.quantity}</span>
-                      <button
-                        onClick={() => handleQuantityChange(item.id, 1)}
-                        className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleRemoveEquipment(item.id)}
-                        className="p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                
-                {selectedEquipment.length === 0 && (
-                  <p className="text-gray-500 text-center py-2">Brak wybranych produktów</p>
-                )}
-              </div>
-            </div>
-            
-            {/* Dane klienta */}
-            <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  Dane klienta
+                    Dane podstawowe
                 </label>
                 <button
                   onClick={() => setShowAddCustomerModal(true)}
@@ -2069,48 +2205,6 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 </div>
                 
                 <div>
-                  <label htmlFor="customer_street" className="block text-sm font-medium text-gray-700 mb-1">
-                    Ulica i numer
-                  </label>
-                  <input
-                    type="text"
-                    id="customer_street"
-                    value={editedCustomer.street}
-                    onChange={(e) => setEditedCustomer({...editedCustomer, street: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                    disabled={!editMode}
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="customer_city" className="block text-sm font-medium text-gray-700 mb-1">
-                    Miasto
-                  </label>
-                  <input
-                    type="text"
-                    id="customer_city"
-                    value={editedCustomer.city}
-                    onChange={(e) => setEditedCustomer({...editedCustomer, city: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                    disabled={!editMode}
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="customer_postal_code" className="block text-sm font-medium text-gray-700 mb-1">
-                    Kod pocztowy
-                  </label>
-                  <input
-                    type="text"
-                    id="customer_postal_code"
-                    value={editedCustomer.postal_code}
-                    onChange={(e) => setEditedCustomer({...editedCustomer, postal_code: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                    disabled={!editMode}
-                  />
-                </div>
-                
-                <div className="mb-4">
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -2121,14 +2215,19 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     />
                     <span className="text-sm font-medium text-gray-700">Klient firmowy</span>
                   </label>
-                </div>
               </div>
             </div>
             
+                {/* Dodatkowe dane klienta */}
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Dodatkowe dane klienta
+                  </label>
+                  <div className="grid grid-cols-1 gap-3">
             {isCompanyCustomer && (
               <>
                 <div>
-                  <label htmlFor="customer_company_name" className="block text-sm font-medium text-gray-700 mb-1">
+                          <label htmlFor="customer_company_name" className="block text-xs text-gray-500 mb-1">
                     Nazwa firmy
                   </label>
                   <input
@@ -2142,7 +2241,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 </div>
                 
                 <div>
-                  <label htmlFor="customer_company_nip" className="block text-sm font-medium text-gray-700 mb-1">
+                          <label htmlFor="customer_company_nip" className="block text-xs text-gray-500 mb-1">
                     NIP
                   </label>
                   <input
@@ -2156,9 +2255,10 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     disabled={!editMode}
                   />
                 </div>
-                
+                      </>
+                    )}
                 <div>
-                  <label htmlFor="customer_street" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="customer_street" className="block text-xs text-gray-500 mb-1">
                     Ulica i numer
                   </label>
                   <input
@@ -2170,39 +2270,36 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     disabled={!editMode}
                   />
                 </div>
-                
+                    <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label htmlFor="customer_city" className="block text-sm font-medium text-gray-700 mb-1">
-                    Miasto
+                        <label htmlFor="customer_postal_code" className="block text-xs text-gray-500 mb-1">
+                          Kod pocztowy
                   </label>
                   <input
                     type="text"
-                    id="customer_city"
-                    value={editedCustomer.city}
-                    onChange={(e) => setEditedCustomer({...editedCustomer, city: e.target.value})}
+                          id="customer_postal_code"
+                          value={editedCustomer.postal_code}
+                          onChange={(e) => setEditedCustomer({...editedCustomer, postal_code: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
                   />
                 </div>
-                
                 <div>
-                  <label htmlFor="customer_postal_code" className="block text-sm font-medium text-gray-700 mb-1">
-                    Kod pocztowy
+                        <label htmlFor="customer_city" className="block text-xs text-gray-500 mb-1">
+                          Miasto
                   </label>
                   <input
                     type="text"
-                    id="customer_postal_code"
-                    value={editedCustomer.postal_code}
-                    onChange={(e) => setEditedCustomer({...editedCustomer, postal_code: e.target.value})}
+                          id="customer_city"
+                          value={editedCustomer.city}
+                          onChange={(e) => setEditedCustomer({...editedCustomer, city: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
                   />
                 </div>
-              </>
-            )}
-            
+                    </div>
             <div>
-              <label htmlFor="customer_notes" className="block text-sm font-medium text-gray-700 mb-1">
+                      <label htmlFor="customer_notes" className="block text-xs text-gray-500 mb-1">
                 Notatki
               </label>
               <textarea
@@ -2214,37 +2311,181 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                 disabled={!editMode}
               />
+                    </div>
+                  </div>
+                </div>
             </div>
             
-            {/* Przypomnienia o rezerwacji */}
+              {/* Termin rezerwacji - prawa strona */}
+              <div>
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Termin rezerwacji
+                </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <CalendarDays className="w-4 h-4" /> Data rozpoczęcia
+                    </label>
+                    <input
+                      type="date"
+                      id="start_date"
+                      value={editedDetails.start_date}
+                      onChange={(e) => setEditedDetails({...editedDetails, start_date: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                      disabled={submitting || !editMode}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <Clock3 className="w-4 h-4" /> Godzina rozpoczęcia
+                </label>
+                    <input
+                      type="time"
+                      id="start_time"
+                      value={editedDetails.start_time}
+                      onChange={(e) => {
+                        const time = e.target.value;
+                        const [hours] = time.split(':').map(Number);
+                        const selectedDate = new Date(editedDetails.start_date);
+                        const isSaturday = selectedDate.getDay() === 6;
+                        
+                        if (hours >= 8 && ((isSaturday && hours < 13) || (!isSaturday && hours < 16))) {
+                          setEditedDetails({...editedDetails, start_time: time});
+                        } else {
+                          alert('Godziny rozpoczęcia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
+                        }
+                      }}
+                      min="08:00"
+                      max={editedDetails.start_date && new Date(editedDetails.start_date).getDay() === 6 ? "13:00" : "16:00"}
+                      step="1800"
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                      disabled={submitting || !editMode}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="end_date" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <CalendarDays className="w-4 h-4" /> Data zakończenia
+                </label>
+                    <input
+                      type="date"
+                      id="end_date"
+                      value={editedDetails.end_date}
+                      onChange={(e) => setEditedDetails({...editedDetails, end_date: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                      disabled={submitting || !editMode}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <Clock3 className="w-4 h-4" /> Godzina zakończenia
+                </label>
+                    <input
+                      type="time"
+                      id="end_time"
+                      value={editedDetails.end_time}
+                      onChange={(e) => {
+                        const time = e.target.value;
+                        const [hours] = time.split(':').map(Number);
+                        const selectedDate = new Date(editedDetails.end_date);
+                        const isSaturday = selectedDate.getDay() === 6;
+                        
+                        if (hours >= 8 && ((isSaturday && hours <= 13) || (!isSaturday && hours <= 16))) {
+                          setEditedDetails({...editedDetails, end_time: time});
+                        } else {
+                          alert('Godziny zakończenia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
+                        }
+                      }}
+                      min="08:00"
+                      max={editedDetails.end_date && new Date(editedDetails.end_date).getDay() === 6 ? "13:00" : "16:00"}
+                      step="1800"
+                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                      disabled={submitting || !editMode}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Wybór produktu */}
             <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Przypomnienia o rezerwacji</h3>
+              <label htmlFor="product_search" className="block text-sm font-medium text-gray-700 mb-1">
+                Produkt
+                </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  id="product_search"
+                  placeholder="Wyszukaj produkt..."
+                  value={searchTerm}
+                  onChange={handleEquipmentSearch}
+                  onFocus={() => setShowEquipmentList(true)}
+                  className="w-full px-3 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                
+                {showEquipmentList && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {availableEquipment
+                      .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map(item => (
+                        <div
+                          key={item.id}
+                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                          onClick={() => handleAddEquipment(item)}
+                        >
+                          <div className="flex justify-between">
+                            <span>{item.name}</span>
+                            <span className="text-solrent-orange font-medium">{item.price} zł/dzień</span>
+                          </div>
+                        </div>
+                      ))}
+                    {availableEquipment.filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                      <div className="px-4 py-2 text-gray-500">Brak wyników</div>
+                    )}
+                  </div>
+                )}
+              </div>
               
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded text-solrent-orange focus:ring-solrent-orange mr-2" />
-                  <span className="text-sm text-gray-700">Wyślij SMS potwierdzający rezerwację</span>
-                </label>
+              {/* Lista wybranych produktów */}
+              <div className="mt-4 space-y-3">
+                {selectedEquipment.map(item => (
+                  <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-600">{item.price} zł/dzień</p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => handleQuantityChange(item.id, -1)}
+                        className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-6 text-center">{item.quantity}</span>
+                      <button
+                        onClick={() => handleQuantityChange(item.id, 1)}
+                        className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRemoveEquipment(item.id)}
+                        className="p-1 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
                 
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded text-solrent-orange focus:ring-solrent-orange mr-2" />
-                  <span className="text-sm text-gray-700">Wyślij przypomnienie SMS</span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded text-solrent-orange focus:ring-solrent-orange mr-2" />
-                  <span className="text-sm text-gray-700">Wyślij przypomnienie SMS o zakończeniu</span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded text-solrent-orange focus:ring-solrent-orange mr-2" />
-                  <span className="text-sm text-gray-700">Wyślij SMS z podziękowaniem</span>
-                </label>
-                
-                <label className="flex items-center">
-                  <input type="checkbox" className="rounded text-solrent-orange focus:ring-solrent-orange mr-2" defaultChecked />
-                  <span className="text-sm text-gray-700">Wyślij e-mail potwierdzający rezerwację</span>
-                </label>
+                {selectedEquipment.length === 0 && (
+                  <p className="text-gray-500 text-center py-2">Brak wybranych produktów</p>
+                )}
               </div>
             </div>
             
@@ -2252,16 +2493,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-700">Usługi dodatkowe</h3>
-                <button
-                  onClick={() => setEditMode(!editMode)}
-                  className={`px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    editMode 
-                      ? 'bg-gray-200 text-gray-700'
-                      : 'bg-solrent-orange text-white hover:bg-orange-700'
-                  }`}
-                >
-                  {editMode ? 'Anuluj edycję' : 'Edytuj dane'}
-                </button>
+                <span className="text-xs text-gray-500">Możesz dodawać i usuwać usługi bez klikania "Edytuj dane"</span>
               </div>
               
               <div className="space-y-3">
@@ -2275,7 +2507,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                       <button
                         onClick={() => handleServiceQuantityChange(service.id, -1)}
                         className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
-                        disabled={service.quantity === 0 || !editMode}
+                        disabled={service.quantity === 0}
                       >
                         <Minus className="w-4 h-4" />
                       </button>
@@ -2283,7 +2515,6 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                       <button
                         onClick={() => handleServiceQuantityChange(service.id, 1)}
                         className="p-1 rounded-full bg-gray-200 hover:bg-gray-300"
-                        disabled={!editMode}
                       >
                         <Plus className="w-4 h-4" />
                       </button>
@@ -2303,7 +2534,9 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
               <div className="flex justify-end">
                 <button
                   onClick={handleSaveChanges}
-                  disabled={submitting || !editedDetails.start_date || !editedDetails.end_date || !editMode}
+                  disabled={submitting || (!editMode && !hasAdditionalServicesToSave()) || 
+                    // W trybie edycji daty są wymagane, ale przy zapisywaniu tylko usług dodatkowych nie są potrzebne
+                    (editMode && (!editedDetails.start_date || !editedDetails.end_date))}
                   className="px-4 py-2 bg-solrent-orange text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? 'Zapisywanie...' : 'Zapisz zmiany'}

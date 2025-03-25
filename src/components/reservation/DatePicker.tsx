@@ -159,6 +159,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
   const getTimeOptions = () => {
     if (selectionStep === 1) {
+      // Ograniczamy wybór godzin do zakresu 8:00-16:00
       const baseOptions = Array.from({ length: 9 }, (_, i) => 
         `${(i + 8).toString().padStart(2, '0')}:00`
       );
@@ -167,17 +168,22 @@ const DatePicker: React.FC<DatePickerProps> = ({
       if (selectedDateTemp && selectedDateTemp.getDay() === 6) {
         return baseOptions.filter(time => {
           const hour = parseInt(time.split(':')[0], 10);
-          return hour <= 13;
+          return hour >= 8 && hour <= 13; // Soboty tylko 8:00-13:00
         });
       }
       
-      return baseOptions;
+      // Dla pozostałych dni ograniczamy do 8:00-16:00
+      return baseOptions.filter(time => {
+        const hour = parseInt(time.split(':')[0], 10);
+        return hour >= 8 && hour <= 16;
+      });
     }
 
     return availableEndTimes;
   };
 
   const calculateAvailableEndTimes = (date: Date) => {
+    // Ograniczamy wybór godzin do zakresu 8:00-16:00
     const baseEndTimes = Array.from({ length: 9 }, (_, i) => 
       `${(i + 8).toString().padStart(2, '0')}:00`
     );
@@ -193,12 +199,17 @@ const DatePicker: React.FC<DatePickerProps> = ({
     return baseEndTimes.filter(time => {
       const hour = parseInt(time.split(':')[0], 10);
       
-      // Filtruj godziny dla soboty
-      if (isSelectedDateSaturday && hour > 13) {
+      // Filtruj godziny dla soboty - tylko 8:00-13:00
+      if (isSelectedDateSaturday && (hour < 8 || hour > 13)) {
+        return false;
+      }
+      
+      // Dla pozostałych dni ograniczamy do 8:00-16:00
+      if (!isSelectedDateSaturday && (hour < 8 || hour > 16)) {
         return false;
       }
 
-      // Filtruj godziny dla tego samego dnia
+      // Filtruj godziny dla tego samego dnia - godzina zakończenia musi być późniejsza
       if (isSameDay && hour <= startHour) {
         return false;
       }
@@ -240,7 +251,22 @@ const DatePicker: React.FC<DatePickerProps> = ({
       return false;
     }
 
-    if (startHour < 8 || startHour > 16 || endHour < 8 || endHour > 16) {
+    // Sprawdź czy godziny są w zakresie 8:00-16:00
+    const isStartDateSaturday = start.getDay() === 6;
+    const isEndDateSaturday = end.getDay() === 6;
+
+    if (isStartDateSaturday && (startHour < 8 || startHour > 13)) {
+      setErrorMessage('W soboty rezerwacje są możliwe tylko w godzinach 8:00-13:00.');
+      return false;
+    } else if (!isStartDateSaturday && (startHour < 8 || startHour > 16)) {
+      setErrorMessage('Rezerwacje są możliwe tylko w godzinach 8:00-16:00.');
+      return false;
+    }
+
+    if (isEndDateSaturday && (endHour < 8 || endHour > 13)) {
+      setErrorMessage('W soboty rezerwacje są możliwe tylko w godzinach 8:00-13:00.');
+      return false;
+    } else if (!isEndDateSaturday && (endHour < 8 || endHour > 16)) {
       setErrorMessage('Rezerwacje są możliwe tylko w godzinach 8:00-16:00.');
       return false;
     }

@@ -190,8 +190,36 @@ export const formatShortDate = (date: Date): string => {
 /**
  * Formatuje czas
  */
-export const formatTime = (time: string): string => {
-  return time;
+export const formatTime = (date: Date | string): string => {
+  if (typeof date === 'string') {
+    date = new Date(date);
+  }
+  
+  // Jeśli niedziela, zwróć pusty string
+  if (date.getDay() === 0) {
+    return '';
+  }
+  
+  // Jeśli sobota, ogranicz do 13:00
+  if (date.getDay() === 6 && date.getHours() > 13) {
+    return '13:00';
+  }
+  
+  // Dla dni roboczych, ogranicz do 16:00
+  if (date.getHours() > 16) {
+    return '16:00';
+  }
+  
+  // Ogranicz minimalną godzinę do 8:00
+  if (date.getHours() < 8) {
+    return '08:00';
+  }
+  
+  return date.toLocaleTimeString('pl-PL', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: false 
+  });
 };
 
 /**
@@ -199,4 +227,40 @@ export const formatTime = (time: string): string => {
  */
 export const formatDateTime = (date: Date): string => {
   return `${formatDate(date)}, ${date.getHours().toString().padStart(2, '0')}:00`;
+};
+
+export const getAvailableHours = (date: Date, isStart: boolean = true): string[] => {
+  const isSaturday = date.getDay() === 6;
+  
+  // Podstawowy zakres godzin
+  const baseHours = Array.from({ length: 9 }, (_, i) => 
+    `${(i + 8).toString().padStart(2, '0')}:00`
+  );
+  
+  // Filtruj godziny dla soboty (8:00-13:00)
+  if (isSaturday) {
+    return baseHours.filter(time => {
+      const hour = parseInt(time.split(':')[0], 10);
+      return hour >= 8 && hour <= 13;
+    });
+  }
+  
+  // Dla dni roboczych (8:00-16:00)
+  return baseHours.filter(time => {
+    const hour = parseInt(time.split(':')[0], 10);
+    return hour >= 8 && hour <= 16;
+  });
+};
+
+export const isValidTimeForDate = (date: Date, time: string): boolean => {
+  const isSaturday = date.getDay() === 6;
+  const hour = parseInt(time.split(':')[0], 10);
+  
+  // Dla soboty dozwolone tylko 8:00-13:00
+  if (isSaturday) {
+    return hour >= 8 && hour <= 13;
+  }
+  
+  // Dla dni roboczych dozwolone 8:00-16:00
+  return hour >= 8 && hour <= 16;
 };

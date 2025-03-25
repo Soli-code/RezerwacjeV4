@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import ReservationWidget from './components/reservation/ReservationWidget';
 import ContactButton from './components/ui/ContactButton';
@@ -16,7 +16,6 @@ import ReservationCalendar from './components/admin/ReservationCalendar';
 import RentalStatistics from './components/admin/RentalStatistics';
 import CustomerDetailsView from './components/customer/CustomerDetailsView';
 import CustomerProfile from './components/customer/CustomerProfile';
-import { checkSupabaseConnection } from './lib/supabase';
 import EquipmentStats from './components/admin/EquipmentStats';
 import EquipmentDetails from './components/admin/EquipmentDetails';
 
@@ -29,26 +28,6 @@ const RedirectToHome = () => {
 };
 
 function App() {
-  const [isConnected, setIsConnected] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        setIsLoading(true);
-        const connected = await checkSupabaseConnection();
-        setIsConnected(connected);
-      } catch (error) {
-        console.error('Błąd podczas sprawdzania połączenia:', error);
-        setIsConnected(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkConnection();
-  }, []);
-
   return (
     <Router>
       <div className="relative min-h-screen">

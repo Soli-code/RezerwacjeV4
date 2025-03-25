@@ -5,6 +5,7 @@ import EquipmentSelector from './EquipmentSelector';
 import PersonalInfoForm from '../forms/PersonalInfoForm';
 import Summary from "../ui/Summary";
 import CollapsibleSummary from "../ui/CollapsibleSummary";
+import { isValidTimeForDate } from '../../lib/availability';
 
 const STEPS = [
   { id: 'equipment', label: 'Wybierz sprzęt', icon: Package },
@@ -76,7 +77,27 @@ const ReservationWidget = () => {
       case 0:
         return reservation.equipment.length > 0;
       case 1:
-        return reservation.startDate && reservation.endDate && reservation.startTime && reservation.endTime;
+        if (reservation.startDate && reservation.endDate && reservation.startTime && reservation.endTime) {
+          const isStartTimeValid = reservation.startDate && reservation.startTime ? 
+            isValidTimeForDate(reservation.startDate, reservation.startTime) : 
+            false;
+          
+          const isEndTimeValid = reservation.endDate && reservation.endTime ? 
+            isValidTimeForDate(reservation.endDate, reservation.endTime) : 
+            false;
+          
+          let isDateRangeValid = true;
+          if (reservation.startDate && reservation.endDate && reservation.startTime && reservation.endTime) {
+            const startDateTime = new Date(reservation.startDate);
+            const endDateTime = new Date(reservation.endDate);
+            startDateTime.setHours(parseInt(reservation.startTime.split(':')[0], 10));
+            endDateTime.setHours(parseInt(reservation.endTime.split(':')[0], 10));
+            isDateRangeValid = endDateTime > startDateTime;
+          }
+          
+          return isStartTimeValid && isEndTimeValid && isDateRangeValid;
+        }
+        return false;
       case 2:
         return isPersonalInfoValid;
       case 3:

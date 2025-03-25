@@ -59,13 +59,11 @@ export const getEquipment = async (retryCount = 0): Promise<Equipment[]> => {
     console.error(`Próba ${retryCount + 1}/${MAX_RETRIES} nie powiodła się:`, error);
     
     if (retryCount < MAX_RETRIES) {
-      console.log(`Ponowna próba za ${RETRY_DELAY * (retryCount + 1)}ms...`);
       await sleep(RETRY_DELAY * (retryCount + 1));
       return getEquipment(retryCount + 1);
     }
     
-    console.error('Wszystkie próby pobierania danych nie powiodły się');
-    throw new Error('Nie udało się pobrać danych. Sprawdź połączenie z internetem i odśwież stronę.');
+    throw new Error('Nie udało się pobrać danych po kilku próbach. Sprawdź połączenie z internetem.');
   }
 };
 
