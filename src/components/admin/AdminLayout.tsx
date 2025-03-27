@@ -4,7 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { 
   Package, Users, Calendar, FileText, PenTool as Tool, 
   AlertTriangle, DollarSign, Settings, UserPlus, Phone, 
-  Mail, FileCheck, ChevronLeft, BarChart2, TrendingUp 
+  Mail, FileCheck, ChevronLeft, BarChart2, TrendingUp,
+  Moon, Sun
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -16,8 +17,25 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingCount, setPendingCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Sprawdź zapisane ustawienie w localStorage lub użyj preferencji systemowych
+    const savedTheme = localStorage.getItem('theme');
+    return savedTheme === 'dark' || 
+           (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Zastosuj ciemny motyw do całej strony
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    // Zapisz preferencję w localStorage
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -84,25 +102,82 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
     { path: 'advertisements', icon: FileText, title: 'Reklamy' }
   ];
 
+  // Funkcja przełączania trybu ciemnego
+  const toggleDarkMode = () => {
+    console.log('Kliknięto przycisk przełączania trybu - obecny stan:', darkMode);
+    
+    // Najpierw ustawiamy nowy stan
+    const newDarkMode = !darkMode;
+    console.log('Nowy stan trybu:', newDarkMode ? 'ciemny' : 'jasny');
+    
+    // Aktualizujemy stan w komponencie
+    setDarkMode(newDarkMode);
+    
+    try {
+      // Zapisujemy w localStorage (to wywołuje zdarzenie storage dla innych komponentów)
+      localStorage.setItem('theme', newDarkMode ? 'dark' : 'light');
+      console.log('Zapisano w localStorage:', newDarkMode ? 'dark' : 'light');
+      
+      // Wprowadzamy zmiany w DOM
+      if (newDarkMode) {
+        console.log('Dodaję klasę dark do html');
+        document.documentElement.classList.add('dark');
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        console.log('Usuwam klasę dark z html');
+        document.documentElement.classList.remove('dark');
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+      
+      // Wymuś synchronizację z localStorage emitując zdarzenie 
+      window.dispatchEvent(new Event('storage'));
+      
+      // Wymuś bezpośrednią aktualizację kontenerów kalendarza
+      console.log('Aktualizuję kontenery fullcalendar');
+      const containers = document.querySelectorAll('.fullcalendar-container');
+      console.log(`Znaleziono ${containers.length} kontenerów kalendarza`);
+      
+      containers.forEach(container => {
+        if (newDarkMode) {
+          container.classList.add('dark');
+        } else {
+          container.classList.remove('dark');
+        }
+      });
+      
+      console.log('Przełączanie trybu zakończone powodzeniem');
+    } catch (error) {
+      console.error('Błąd podczas przełączania trybu:', error);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       {/* Nagłówek */}
-      <header className={`bg-white shadow fixed top-0 right-0 left-0 z-30 transition-all duration-300 ${!isMobile ? (isCollapsed ? 'ml-16' : 'ml-64') : 'ml-0'}`}>
+      <header className={`bg-white dark:bg-gray-800 shadow fixed top-0 right-0 left-0 z-30 transition-all duration-300 ${!isMobile ? (isCollapsed ? 'ml-16' : 'ml-64') : 'ml-0'}`}>
         <div className="flex justify-between items-center h-[73px] px-4">
           {isMobile && (
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-lg hover:bg-gray-100"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isMobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
               </svg>
             </button>
           )}
           <div className="flex justify-between items-center">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 ml-2">Panel Administracyjny</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white ml-2">Panel Administracyjny</h1>
           </div>
-          <div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title={darkMode ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+              aria-label={darkMode ? 'Przełącz na jasny motyw' : 'Przełącz na ciemny motyw'}
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <button
               onClick={onLogout}
               className="px-3 py-1.5 md:px-4 md:py-2 bg-red-600 text-white text-sm md:text-base rounded hover:bg-red-700"
@@ -113,14 +188,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
         </div>
       </header>
 
-      <div className="flex h-screen pt-[73px]">
+      <div className="flex h-screen pt-[73px] bg-gray-100 dark:bg-gray-900">
         {/* Menu boczne */}
-        <nav className={`fixed left-0 top-0 h-full bg-white shadow-lg transition-all duration-300 ease-in-out z-40
+        <nav className={`fixed left-0 top-0 h-full bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 ease-in-out z-40
           ${isMobile 
             ? `w-64 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`
             : `${isCollapsed ? 'w-16' : 'w-64'}`
           }`}>
-          <div className="h-[73px] flex items-center justify-center border-b">
+          <div className="h-[73px] flex items-center justify-center border-b dark:border-gray-700">
             <img 
               src="/assets/solrent-logo.png"
               alt="SOLRENT Logo"
@@ -130,27 +205,38 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
           {!isMobile && (
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="absolute -right-3 top-20 bg-white rounded-full p-1.5 shadow-lg border"
+              className="absolute -right-3 top-20 bg-white dark:bg-gray-800 rounded-full p-1.5 shadow-lg border dark:border-gray-700"
               aria-label={isCollapsed ? 'Rozwiń menu' : 'Zwiń menu'}
             >
-              <ChevronLeft className={`w-4 h-4 text-gray-600 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
+              <ChevronLeft className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
             </button>
           )}
           <div className="space-y-1 p-4">
-            {menuItems.map(item => (
-              <MenuItem
-                key={item.path}
-                icon={item.icon}
-                title={item.title}
-                active={location.pathname.includes(`/admin/panel/${item.path}`)}
-                onClick={() => {
-                  navigate(`/admin/panel/${item.path}`);
-                  if (isMobile) setIsMobileMenuOpen(false);
-                }}
-                collapsed={!isMobile && isCollapsed}
-                badge={item.badge}
-              />
-            ))}
+            {menuItems.map(item => {
+              let isActive = false;
+              
+              if (item.path === 'equipment') {
+                isActive = location.pathname.includes(`/admin/panel/${item.path}`) && 
+                          !location.pathname.includes('/admin/panel/equipment-stats');
+              } else {
+                isActive = location.pathname.includes(`/admin/panel/${item.path}`);
+              }
+              
+              return (
+                <MenuItem
+                  key={item.path}
+                  icon={item.icon}
+                  title={item.title}
+                  active={isActive}
+                  onClick={() => {
+                    navigate(`/admin/panel/${item.path}`);
+                    if (isMobile) setIsMobileMenuOpen(false);
+                  }}
+                  collapsed={!isMobile && isCollapsed}
+                  badge={item.badge}
+                />
+              );
+            })}
           </div>
         </nav>
 
@@ -163,7 +249,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
         )}
 
         {/* Główna zawartość */}
-        <main className={`flex-1 bg-white rounded-lg shadow-lg p-4 md:p-6 lg:p-8 transition-all duration-300 overflow-auto mt-4
+        <main className={`flex-1 bg-white dark:bg-gray-800 dark:text-gray-200 rounded-lg shadow-lg p-4 md:p-6 lg:p-8 transition-all duration-300 overflow-auto mt-4
           ${isMobile ? 'ml-0' : (isCollapsed ? 'ml-16' : 'ml-64')}`}>
           <Outlet />
         </main>
@@ -194,7 +280,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
     className={`w-full flex items-center ${collapsed ? 'justify-center' : 'justify-start px-3'} py-3 md:py-2 rounded-lg transition-all duration-300 ${
       active 
         ? 'bg-solrent-orange text-white' 
-        : 'text-gray-600 hover:bg-gray-100'
+        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
     }`}
     title={collapsed ? title : undefined}
   >

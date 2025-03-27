@@ -119,10 +119,11 @@ const DatePicker: React.FC<DatePickerProps> = ({ reservedDates, onDateSelect }) 
           onClick={() => isSelectable && handleDateSelect(date)}
           className={`
             h-10 w-10 rounded-full text-sm font-medium
-            ${isReserved ? 'bg-red-100 text-red-600 cursor-not-allowed' : ''}
-            ${isInRange ? 'bg-blue-100 text-blue-600' : ''}
+            ${isReserved ? 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-200 cursor-not-allowed' : ''}
+            ${isInRange ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-200' : ''}
             ${isSelected ? 'bg-blue-600 text-white' : ''}
-            ${!isSelectable ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100'}
+            ${!isSelectable ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-100 dark:hover:bg-blue-900'}
+            ${!isReserved && !isInRange && !isSelected && isSelectable ? 'dark:text-gray-200' : ''}
           `}
           disabled={!isSelectable}
         >
@@ -143,7 +144,7 @@ const DatePicker: React.FC<DatePickerProps> = ({ reservedDates, onDateSelect }) 
     <div className="w-full max-w-md mx-auto p-4">
       <div className="grid grid-cols-7 gap-1">
         {['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'].map(day => (
-          <div key={day} className="text-center text-sm font-medium text-gray-500">
+          <div key={day} className="text-center text-sm font-medium text-gray-500 dark:text-gray-400">
             {day}
           </div>
         ))}

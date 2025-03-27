@@ -101,11 +101,21 @@ const AdminCalendar: React.FC = () => {
 
   const getEventColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return '#22c55e'; // green
-      case 'pending': return '#f59e0b'; // yellow
-      case 'cancelled': return '#ef4444'; // red
-      case 'completed': return '#3b82f6'; // blue
-      default: return '#6b7280'; // gray
+      case 'confirmed': return '#4CAF50'; // Zielony
+      case 'pending': return '#FFC107';   // Żółty
+      case 'cancelled': return '#F44336'; // Czerwony
+      case 'completed': return '#2196F3'; // Niebieski
+      default: return '#9E9E9E';          // Szary
+    }
+  };
+
+  const translateStatus = (status: string) => {
+    switch (status) {
+      case 'confirmed': return 'Potwierdzona';
+      case 'pending': return 'Oczekująca';
+      case 'cancelled': return 'Anulowana';
+      case 'completed': return 'Zakończona';
+      default: return status;
     }
   };
 
@@ -175,10 +185,10 @@ const AdminCalendar: React.FC = () => {
 
     return (
       <div className="p-1 overflow-hidden">
-        <div className="font-medium text-sm truncate">
+        <div className="font-medium text-sm truncate dark:text-white">
           {reservation.customer.first_name} {reservation.customer.last_name}
         </div>
-        <div className="text-xs truncate">
+        <div className="text-xs truncate dark:text-gray-300">
           {reservation.items.map(item => item.equipment.name).join(', ')}
         </div>
       </div>
@@ -191,7 +201,7 @@ const AdminCalendar: React.FC = () => {
         <div className="flex items-center space-x-4">
           <div className="relative">
             <button
-              className="px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-gray-50 flex items-center space-x-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center space-x-2 dark:text-gray-300"
               onClick={() => document.getElementById('status-filter')?.click()}
             >
               <Filter className="w-4 h-4" />
@@ -216,14 +226,14 @@ const AdminCalendar: React.FC = () => {
           <div className="flex space-x-2">
             <button
               onClick={exportToPDF}
-              className="px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-gray-50 flex items-center space-x-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center space-x-2 dark:text-gray-300"
             >
               <Download className="w-4 h-4" />
               <span>PDF</span>
             </button>
             <button
               onClick={exportToCSV}
-              className="px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-gray-50 flex items-center space-x-2"
+              className="px-4 py-2 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center space-x-2 dark:text-gray-300"
             >
               <Download className="w-4 h-4" />
               <span>CSV</span>
@@ -232,7 +242,7 @@ const AdminCalendar: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow fullcalendar-container">
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
@@ -273,15 +283,15 @@ const AdminCalendar: React.FC = () => {
       {/* Modal ze szczegółami rezerwacji */}
       {selectedEvent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4">
             <div className="p-6">
               <div className="flex justify-between items-start">
-                <h3 className="text-xl font-semibold text-gray-900">
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                   Szczegóły rezerwacji
                 </h3>
                 <button
                   onClick={() => setSelectedEvent(null)}
-                  className="text-gray-400 hover:text-gray-500"
+                  className="text-gray-400 hover:text-gray-500 dark:text-gray-300 dark:hover:text-gray-200"
                 >
                   <X className="w-6 h-6" />
                 </button>
@@ -289,15 +299,15 @@ const AdminCalendar: React.FC = () => {
 
               <div className="mt-6 space-y-4">
                 <div>
-                  <h4 className="font-medium text-gray-700">Klient</h4>
-                  <p>{selectedEvent.customer.first_name} {selectedEvent.customer.last_name}</p>
-                  <p className="text-sm text-gray-500">{selectedEvent.customer.email}</p>
-                  <p className="text-sm text-gray-500">{selectedEvent.customer.phone}</p>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300">Klient</h4>
+                  <p className="dark:text-gray-200">{selectedEvent.customer.first_name} {selectedEvent.customer.last_name}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedEvent.customer.email}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedEvent.customer.phone}</p>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-700">Termin</h4>
-                  <p>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300">Termin</h4>
+                  <p className="dark:text-gray-200">
                     {new Date(selectedEvent.start_date).toLocaleDateString()} {selectedEvent.start_time}
                     {' - '}
                     {new Date(selectedEvent.end_date).toLocaleDateString()} {selectedEvent.end_time}
@@ -305,8 +315,8 @@ const AdminCalendar: React.FC = () => {
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-700">Sprzęt</h4>
-                  <ul className="list-disc list-inside">
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300">Sprzęt</h4>
+                  <ul className="list-disc list-inside dark:text-gray-200">
                     {selectedEvent.items.map((item, index) => (
                       <li key={index}>
                         {item.equipment.name} (x{item.quantity})
@@ -314,44 +324,32 @@ const AdminCalendar: React.FC = () => {
                     ))}
                   </ul>
                 </div>
-
+                
                 <div>
-                  <h4 className="font-medium text-gray-700">Status</h4>
-                  <div className="flex items-center space-x-2 mt-2">
-                    {selectedEvent.status === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => handleStatusChange(selectedEvent.id, 'confirmed')}
-                          className="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center space-x-1"
-                        >
-                          <Check className="w-4 h-4" />
-                          <span>Potwierdź</span>
-                        </button>
-                        <button
-                          onClick={() => handleStatusChange(selectedEvent.id, 'cancelled')}
-                          className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center space-x-1"
-                        >
-                          <X className="w-4 h-4" />
-                          <span>Anuluj</span>
-                        </button>
-                      </>
-                    )}
-                    {selectedEvent.status === 'confirmed' && (
-                      <button
-                        onClick={() => handleStatusChange(selectedEvent.id, 'completed')}
-                        className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center space-x-1"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>Zakończ</span>
-                      </button>
-                    )}
-                  </div>
+                  <h4 className="font-medium text-gray-700 dark:text-gray-300">Razem</h4>
+                  <p className="text-xl font-semibold dark:text-gray-200">{selectedEvent.total_price.toFixed(2)} zł</p>
                 </div>
+              </div>
 
-                <div className="mt-4 pt-4 border-t">
-                  <p className="font-medium text-gray-900">
-                    Całkowita wartość: {selectedEvent.total_price} zł
-                  </p>
+              <div className="mt-8 flex justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full text-white bg-blue-500">
+                    {translateStatus(selectedEvent.status)}
+                  </span>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleStatusChange(selectedEvent.id, 'cancelled')}
+                    className="px-4 py-2 bg-red-50 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-lg font-medium hover:bg-red-100 dark:hover:bg-red-800"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    onClick={() => handleStatusChange(selectedEvent.id, 'confirmed')}
+                    className="px-4 py-2 bg-green-50 dark:bg-green-900 text-green-700 dark:text-green-200 rounded-lg font-medium hover:bg-green-100 dark:hover:bg-green-800"
+                  >
+                    Potwierdź
+                  </button>
                 </div>
               </div>
             </div>
@@ -360,12 +358,12 @@ const AdminCalendar: React.FC = () => {
       )}
 
       {error && (
-        <div className="fixed bottom-4 right-4 bg-red-50 text-red-700 px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2">
+        <div className="fixed bottom-4 right-4 bg-red-50 dark:bg-red-900 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2">
           <AlertTriangle className="w-5 h-5" />
           <span>{error}</span>
           <button
             onClick={() => setError(null)}
-            className="ml-2 text-red-500 hover:text-red-600"
+            className="ml-2 text-red-500 dark:text-red-300 hover:text-red-600 dark:hover:text-red-200"
           >
             <X className="w-4 h-4" />
           </button>

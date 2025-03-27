@@ -45,50 +45,106 @@ const EquipmentStats: React.FC = () => {
       // Pobierz sprzęt z ceną zakupu
       const { data: equipment, error: equipmentError } = await supabase
         .from('equipment')
+        .select('id, name, purchase_price, purchase_date, price');
+
+      if (equipmentError) {
+        console.error('Błąd pobierania sprzętu:', equipmentError);
+        throw equipmentError;
+      }
+
+      if (!equipment || equipment.length === 0) {
+        setStats([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Pobierz elementy rezerwacji dla wszystkich zakończonych rezerwacji
+      const { data: reservationItems, error: reservationItemsError } = await supabase
+        .from('reservation_items')
         .select(`
-          id,
-          name,
-          purchase_price,
-          purchase_date,
-          price,
-          promotional_price,
-          deposit,
-          image,
-          categories,
-          quantity,
-          description
-        `);
+          id, 
+          equipment_id, 
+          quantity, 
+          price_per_day,
+          reservation_id,
+          reservations!inner(status)
+        `)
+        .eq('reservations.status', 'completed');
 
-      if (equipmentError) throw equipmentError;
+      if (reservationItemsError) {
+        console.error('Błąd pobierania elementów rezerwacji:', reservationItemsError);
+        throw reservationItemsError;
+      }
 
-      // Dla każdego sprzętu pobierz sumę przychodów z rezerwacji
-      const statsWithRevenue = await Promise.all(
-        equipment.map(async (item) => {
-          const { data: reservations, error: reservationsError } = await supabase
-            .from('reservations')
-            .select('total_price')
-            .eq('equipment_id', item.id)
-            .eq('status', 'completed');
+      // Oblicz rzeczywisty przychód dla każdego sprzętu na podstawie reservation_items
+      const revenueByEquipment: Record<string, number> = {};
+      
+      // Dla każdego elementu rezerwacji, oblicz przychód jako (cena za dzień * ilość)
+      // i przypisz go do odpowiedniego sprzętu
+      if (reservationItems && reservationItems.length > 0) {
+        // Pobierz długości rezerwacji
+        const reservationIds = [...new Set(reservationItems.map(item => item.reservation_id))];
+        const { data: reservations, error: reservationsError } = await supabase
+          .from('reservations')
+          .select('id, rental_days, start_date, end_date')
+          .in('id', reservationIds);
 
-          if (reservationsError) throw reservationsError;
+        if (reservationsError) {
+          console.error('Błąd pobierania dni rezerwacji:', reservationsError);
+          throw reservationsError;
+        }
 
-          const totalRevenue = reservations?.reduce((sum, res) => sum + (res.total_price || 0), 0) || 0;
-          const payoffPercentage = item.purchase_price ? (totalRevenue / item.purchase_price) * 100 : 0;
+        // Utwórz mapę dni rezerwacji
+        const rentalDaysByReservation: Record<string, number> = {};
+        reservations?.forEach(res => {
+          // Jeśli rezerwacja ma ustawione dni, użyj tej wartości
+          if (res.rental_days) {
+            rentalDaysByReservation[res.id] = res.rental_days;
+          } else if (res.start_date && res.end_date) {
+            // W przeciwnym razie oblicz liczbę dni na podstawie dat
+            const start = new Date(res.start_date);
+            const end = new Date(res.end_date);
+            const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            rentalDaysByReservation[res.id] = Math.max(1, days); // Minimum 1 dzień
+          } else {
+            rentalDaysByReservation[res.id] = 1; // Domyślnie 1 dzień
+          }
+        });
 
-          return {
-            ...item,
-            total_revenue: totalRevenue,
-            payoff_percentage: payoffPercentage
-          };
-        })
-      );
+        // Oblicz przychód dla każdego sprzętu
+        reservationItems.forEach(item => {
+          if (!item.equipment_id) return;
+          
+          const days = rentalDaysByReservation[item.reservation_id] || 1;
+          // Oblicz przychód jako: cena za dzień * ilość * liczba dni
+          const itemRevenue = (item.price_per_day || 0) * (item.quantity || 1) * days;
+          
+          // Dodaj przychód do sumy dla tego sprzętu
+          revenueByEquipment[item.equipment_id] = (revenueByEquipment[item.equipment_id] || 0) + itemRevenue;
+        });
+      }
 
-      setStats(statsWithRevenue);
-      setError(null);
+      // Utwórz statystyki dla każdego sprzętu
+      const validStats = equipment.map(item => {
+        const purchase_price = Number(item.purchase_price) || 0;
+        const total_revenue = revenueByEquipment[item.id] || 0;
+        const payoff_percentage = purchase_price > 0 ? (total_revenue / purchase_price) * 100 : 0;
+        
+        return {
+          id: item.id || '',
+          name: item.name || 'Nieznany produkt',
+          purchase_price: purchase_price,
+          purchase_date: item.purchase_date || new Date().toISOString(),
+          total_revenue: total_revenue,
+          payoff_percentage: payoff_percentage
+        };
+      });
+
+      setStats(validStats);
+      setIsLoading(false);
     } catch (err) {
       console.error('Error loading stats:', err);
-      setError('Nie udało się załadować statystyk');
-    } finally {
+      setError('Nie udało się załadować statystyk. Spróbuj odświeżyć stronę.');
       setIsLoading(false);
     }
   };

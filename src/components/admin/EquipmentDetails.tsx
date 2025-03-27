@@ -78,10 +78,28 @@ const EquipmentDetails: React.FC = () => {
 
       if (equipmentError) throw equipmentError;
 
-      // Pobierz elementy rezerwacji dla danego sprzętu
+      // Pobierz elementy rezerwacji dla danego sprzętu z uwzględnieniem ceny za dzień
       const { data: reservationItems, error: reservationItemsError } = await supabase
         .from('reservation_items')
-        .select('reservation_id, quantity')
+        .select(`
+          id, 
+          equipment_id, 
+          quantity, 
+          price_per_day,
+          reservation_id,
+          reservations!inner(
+            id,
+            start_date,
+            end_date,
+            total_price,
+            status,
+            rental_days,
+            customers(
+              first_name,
+              last_name
+            )
+          )
+        `)
         .eq('equipment_id', id);
 
       if (reservationItemsError) throw reservationItemsError;
@@ -100,34 +118,37 @@ const EquipmentDetails: React.FC = () => {
         return;
       }
 
-      // Pobierz rezerwacje na podstawie reservation_id
-      const reservationIds = reservationItems.map(ri => ri.reservation_id);
-      const { data: rentals, error: rentalsError } = await supabase
-        .from('reservations')
-        .select(`
-          id,
-          start_date,
-          end_date,
-          total_price,
-          status,
-          customers (
-            first_name,
-            last_name
-          )
-        `)
-        .in('id', reservationIds)
-        .order('start_date', { ascending: false });
+      // Filtruj tylko zakończone rezerwacje
+      const completedItems = reservationItems.filter(item => 
+        item.reservations && item.reservations.status === 'completed'
+      );
 
-      if (rentalsError) throw rentalsError;
+      // Przygotuj dane dla historii rezerwacji
+      const rentalHistory = reservationItems.map(item => {
+        if (!item.reservations) return null;
+        
+        return {
+          id: item.reservation_id,
+          start_date: item.reservations.start_date,
+          end_date: item.reservations.end_date,
+          // Używamy ceny za dzień * ilość dla tego konkretnego sprzętu
+          total_price: calculateItemRevenue(item),
+          customer_name: item.reservations.customers ? 
+            `${item.reservations.customers.first_name} ${item.reservations.customers.last_name}` : 
+            'Nieznany klient',
+          status: item.reservations.status
+        };
+      }).filter(item => item !== null) as RentalHistory[];
 
-      // Przygotuj dane miesięcznych przychodów
-      const monthlyData = rentals
-        .filter(rental => rental.status === 'completed')
-        .reduce((acc: { [key: string]: number }, rental) => {
-          const month = new Date(rental.start_date).toISOString().slice(0, 7);
-          acc[month] = (acc[month] || 0) + rental.total_price;
-          return acc;
-        }, {});
+      // Przygotuj dane miesięcznych przychodów na podstawie ceny za dzień * ilość
+      const monthlyData = completedItems.reduce((acc: { [key: string]: number }, item) => {
+        if (!item.reservations || !item.reservations.start_date) return acc;
+        
+        const month = new Date(item.reservations.start_date).toISOString().slice(0, 7);
+        const itemRevenue = calculateItemRevenue(item);
+        acc[month] = (acc[month] || 0) + itemRevenue;
+        return acc;
+      }, {});
 
       const sortedMonths = Object.keys(monthlyData).sort();
       let cumulativeRevenue = 0;
@@ -140,19 +161,8 @@ const EquipmentDetails: React.FC = () => {
         };
       });
 
-      const rentalHistory = rentals.map(rental => ({
-        id: rental.id,
-        start_date: rental.start_date,
-        end_date: rental.end_date,
-        total_price: rental.total_price,
-        customer_name: rental.customers ? `${rental.customers.first_name} ${rental.customers.last_name}` : 'Nieznany klient',
-        status: rental.status
-      }));
-
-      // Oblicz całkowity przychód i procent spłaty
-      const totalRevenue = rentals
-        .filter(rental => rental.status === 'completed')
-        .reduce((sum, rental) => sum + (rental.total_price || 0), 0);
+      // Oblicz całkowity przychód na podstawie ceny za dzień * ilość * liczba dni
+      const totalRevenue = completedItems.reduce((sum, item) => sum + calculateItemRevenue(item), 0);
       
       const payoffPercentage = equipment.purchase_price 
         ? (totalRevenue / equipment.purchase_price) * 100 
@@ -173,6 +183,25 @@ const EquipmentDetails: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Funkcja pomocnicza do obliczania przychodu dla elementu rezerwacji
+  const calculateItemRevenue = (item: any) => {
+    if (!item || !item.reservations) return 0;
+    
+    // Ustal liczbę dni
+    let days = 1;
+    if (item.reservations.rental_days) {
+      days = item.reservations.rental_days;
+    } else if (item.reservations.start_date && item.reservations.end_date) {
+      const start = new Date(item.reservations.start_date);
+      const end = new Date(item.reservations.end_date);
+      days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      days = Math.max(1, days); // Minimum 1 dzień
+    }
+    
+    // Oblicz przychód jako: cena za dzień * ilość * liczba dni
+    return (item.price_per_day || 0) * (item.quantity || 1) * days;
   };
 
   const getEstimatedPayoffDate = () => {

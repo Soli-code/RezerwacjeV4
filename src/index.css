@@ -36,15 +36,15 @@
 .grid-cols-31 {
   grid-template-columns: repeat(31, minmax(40px, 1fr));
   min-width: 100%;
-  & > div {
-    position: relative;
-  }
-  
-  /* Style dla gradientu tła */
-  & .bg-gradient-to-r {
-    background-size: 200% 100%;
-    animation: gradient 2s ease infinite;
-  }
+}
+
+.grid-cols-31 > div {
+  position: relative;
+}
+
+/* Style dla gradientu tła */
+.grid-cols-31 .bg-gradient-to-r {
+  background-size: 200% 100%;
 }
 
 @keyframes gradient {
@@ -67,4 +67,156 @@
   .modal-open {
     --summary-height: 0px;
   }
+}
+
+/* Fullcalendar dark mode */
+.dark .fc, 
+html[data-theme="dark"] .fc,
+.fullcalendar-container.dark .fc {
+  --fc-border-color: #4b5563; /* gray-600 */
+  --fc-button-bg-color: #4b5563; /* gray-600 */
+  --fc-button-border-color: #4b5563; /* gray-600 */
+  --fc-button-hover-bg-color: #374151; /* gray-700 */
+  --fc-button-hover-border-color: #374151; /* gray-700 */
+  --fc-button-active-bg-color: #1f2937; /* gray-800 */
+  --fc-button-active-border-color: #1f2937; /* gray-800 */
+  --fc-event-bg-color: #ff5722; /* solrent-orange */
+  --fc-event-border-color: #ff5722; /* solrent-orange */
+  --fc-event-text-color: #ffffff;
+  --fc-page-bg-color: #1f2937; /* gray-800 */
+  --fc-neutral-bg-color: #374151; /* gray-700 */
+  --fc-neutral-text-color: #e5e7eb; /* gray-200 */
+  --fc-list-event-hover-bg-color: #374151; /* gray-700 */
+  --fc-today-bg-color: rgba(255, 87, 34, 0.1); /* solrent-orange with opacity */
+  color-scheme: dark;
+}
+
+/* Dodatkowe selektory dla różnych elementów FullCalendar w trybie ciemnym */
+.dark .fc-theme-standard .fc-scrollgrid,
+.dark .fc-theme-standard .fc-list,
+.dark .fc .fc-cell-shaded,
+.dark .fc .fc-day-disabled,
+html[data-theme="dark"] .fc-theme-standard .fc-scrollgrid,
+html[data-theme="dark"] .fc-theme-standard .fc-list,
+html[data-theme="dark"] .fc .fc-cell-shaded,
+html[data-theme="dark"] .fc .fc-day-disabled,
+.fullcalendar-container.dark .fc-theme-standard .fc-scrollgrid,
+.fullcalendar-container.dark .fc-theme-standard .fc-list,
+.fullcalendar-container.dark .fc .fc-cell-shaded,
+.fullcalendar-container.dark .fc .fc-day-disabled {
+  border-color: #4b5563; /* gray-600 */
+}
+
+.dark .fc-scrollgrid-section-header > th,
+.dark .fc-col-header-cell,
+.dark .fc .fc-timegrid-axis-cushion,
+html[data-theme="dark"] .fc-scrollgrid-section-header > th,
+html[data-theme="dark"] .fc-col-header-cell,
+html[data-theme="dark"] .fc .fc-timegrid-axis-cushion,
+.fullcalendar-container.dark .fc-scrollgrid-section-header > th,
+.fullcalendar-container.dark .fc-col-header-cell,
+.fullcalendar-container.dark .fc .fc-timegrid-axis-cushion {
+  background-color: #374151; /* gray-700 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .fc-daygrid-day-number,
+.dark .fc-col-header-cell-cushion,
+.dark .fc-timegrid-slot-label-cushion,
+.dark .fc-list-day-text,
+.dark .fc-list-day-side-text {
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .fc-day-today {
+  background-color: rgba(255, 87, 34, 0.1) !important; /* solrent-orange with opacity */
+}
+
+.dark .fc-timegrid-slots tr, 
+.dark .fc-daygrid-day-frame,
+.dark .fc-list-empty {
+  background-color: #1f2937; /* gray-800 */
+}
+
+.dark .fc-highlight {
+  background-color: rgba(255, 87, 34, 0.2) !important; /* solrent-orange with opacity */
+}
+
+.dark .fc-list-event:hover td {
+  background-color: #374151 !important; /* gray-700 */
+}
+
+.dark .fc .fc-toolbar-title {
+  color: #e5e7eb; /* gray-200 */
+}
+
+/* Wymuś kolor tła dla FullCalendar w trybie ciemnym */
+.fullcalendar-container.dark .fc,
+html[data-theme="dark"] .fullcalendar-container .fc,
+.dark .fullcalendar-container .fc {
+  background-color: #1f2937 !important; /* gray-800 */
+}
+
+/* Dodatkowe style dla poprawienia pełnego wsparcia dla trybu ciemnego */
+.dark .fc-theme-standard td, 
+.dark .fc-theme-standard th,
+html[data-theme="dark"] .fc-theme-standard td,
+html[data-theme="dark"] .fc-theme-standard th,
+.fullcalendar-container.dark .fc-theme-standard td,
+.fullcalendar-container.dark .fc-theme-standard th {
+  border-color: #4b5563 !important; /* gray-600 */
+}
+
+/* Wymuś tryb ciemny dla wszystkich przycisków i elementów interaktywnych kalendarza */
+.dark .fc .fc-button,
+html[data-theme="dark"] .fc .fc-button,
+.fullcalendar-container.dark .fc .fc-button {
+  background-color: #4b5563 !important; /* gray-600 */
+  border-color: #4b5563 !important; /* gray-600 */
+  color: #ffffff !important;
+}
+
+.dark .fc .fc-button:hover,
+html[data-theme="dark"] .fc .fc-button:hover,
+.fullcalendar-container.dark .fc .fc-button:hover {
+  background-color: #374151 !important; /* gray-700 */
+  border-color: #374151 !important; /* gray-700 */
+}
+
+.dark .fc .fc-button-primary:not(:disabled).fc-button-active,
+.dark .fc .fc-button-primary:not(:disabled):active,
+html[data-theme="dark"] .fc .fc-button-primary:not(:disabled).fc-button-active,
+html[data-theme="dark"] .fc .fc-button-primary:not(:disabled):active,
+.fullcalendar-container.dark .fc .fc-button-primary:not(:disabled).fc-button-active,
+.fullcalendar-container.dark .fc .fc-button-primary:not(:disabled):active {
+  background-color: #1f2937 !important; /* gray-800 */
+  border-color: #1f2937 !important; /* gray-800 */
+}
+
+/* Dodatkowe reguły dla tła kalendarza */
+.dark .fc-view-harness,
+html[data-theme="dark"] .fc-view-harness,
+.fullcalendar-container.dark .fc-view-harness {
+  background-color: #1f2937 !important; /* gray-800 */
+}
+
+/* Zawsze dodaj !important do stylów dark mode, aby miały wyższy priorytet */
+.dark .fc,
+html[data-theme="dark"] .fc,
+.fullcalendar-container.dark .fc {
+  --fc-border-color: #4b5563 !important; /* gray-600 */
+  --fc-button-bg-color: #4b5563 !important; /* gray-600 */
+  --fc-button-border-color: #4b5563 !important; /* gray-600 */
+  --fc-button-hover-bg-color: #374151 !important; /* gray-700 */
+  --fc-button-hover-border-color: #374151 !important; /* gray-700 */
+  --fc-button-active-bg-color: #1f2937 !important; /* gray-800 */
+  --fc-button-active-border-color: #1f2937 !important; /* gray-800 */
+  --fc-event-bg-color: #ff5722 !important; /* solrent-orange */
+  --fc-event-border-color: #ff5722 !important; /* solrent-orange */
+  --fc-event-text-color: #ffffff !important;
+  --fc-page-bg-color: #1f2937 !important; /* gray-800 */
+  --fc-neutral-bg-color: #374151 !important; /* gray-700 */
+  --fc-neutral-text-color: #e5e7eb !important; /* gray-200 */
+  --fc-list-event-hover-bg-color: #374151 !important; /* gray-700 */
+  --fc-today-bg-color: rgba(255, 87, 34, 0.1) !important; /* solrent-orange with opacity */
 }

@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fullcalendar dark mode */
+.dark .fc {
+  --fc-border-color: #4b5563; /* gray-600 */
+  --fc-button-bg-color: #4b5563; /* gray-600 */
+  --fc-button-border-color: #4b5563; /* gray-600 */
+  --fc-button-hover-bg-color: #374151; /* gray-700 */
+  --fc-button-hover-border-color: #374151; /* gray-700 */
+  --fc-button-active-bg-color: #1f2937; /* gray-800 */
+  --fc-button-active-border-color: #1f2937; /* gray-800 */
+  --fc-event-bg-color: #ff5722; /* solrent-orange */
+  --fc-event-border-color: #ff5722; /* solrent-orange */
+  --fc-event-text-color: #ffffff;
+  --fc-page-bg-color: #1f2937; /* gray-800 */
+  --fc-neutral-bg-color: #374151; /* gray-700 */
+  --fc-neutral-text-color: #e5e7eb; /* gray-200 */
+  --fc-list-event-hover-bg-color: #374151; /* gray-700 */
+}
+
+.dark .fc-theme-standard .fc-scrollgrid,
+.dark .fc-theme-standard .fc-list {
+  border-color: #4b5563; /* gray-600 */
+}
+
+.dark .fc-scrollgrid-section-header > th,
+.dark .fc-col-header-cell {
+  background-color: #374151; /* gray-700 */
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .fc-daygrid-day-number,
+.dark .fc-col-header-cell-cushion {
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .fc-list-day-cushion {
+  background-color: #374151; /* gray-700 */
+}
+
+.dark .fc-list-event td {
+  color: #e5e7eb; /* gray-200 */
+}
+
+.dark .fc-daygrid-day.fc-day-today {
+  background-color: rgba(255, 87, 34, 0.1); /* solrent-orange with opacity */
+}
+
+/* Pozostałe style */
+/* ... existing code ... */ 

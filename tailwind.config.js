@@ -1,18 +1,13 @@
 /** @type {import('tailwindcss').Config} */
-export default {
-  content: [
-    './index.html',
-    './src/**/*.{js,ts,jsx,tsx}'
-  ],
+module.exports = {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        solrent: {
-          orange: '#FF6B00',
-          dark: '#333333',
-          gray: '#666666',
-          light: '#F5F5F5'
-        }
+        'solrent-orange': '#ff5722',
+        'solrent-dark': '#212121',
+        'solrent-gray': '#808080'
       }
     },
   },

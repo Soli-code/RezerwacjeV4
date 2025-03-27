@@ -28,7 +28,81 @@ const RedirectToHome = () => {
   return null;
 };
 
+// Funkcja synchronizacji trybu ciemnego
+const syncDarkMode = () => {
+  const savedTheme = localStorage.getItem('theme');
+  const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const shouldBeDark = savedTheme === 'dark' || (!savedTheme && prefersDarkMode);
+  
+  if (shouldBeDark) {
+    document.documentElement.classList.add('dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+  
+  // Aktualizuj również kontenery fullcalendar
+  document.querySelectorAll('.fullcalendar-container').forEach(container => {
+    if (shouldBeDark) {
+      container.classList.add('dark');
+    } else {
+      container.classList.remove('dark');
+    }
+  });
+  
+  return shouldBeDark;
+};
+
 function App() {
+  useEffect(() => {
+    // Inicjalizacja trybu ciemnego
+    syncDarkMode();
+    
+    // Obserwuj zmiany w localStorage
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'theme') {
+        console.log('Wykryto zmianę w localStorage theme:', e.newValue);
+        syncDarkMode();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Obserwuj zmiany klasy 'dark' na elemencie HTML
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          const htmlElement = document.documentElement;
+          const isDark = htmlElement.classList.contains('dark');
+          
+          document.querySelectorAll('.fullcalendar-container').forEach(container => {
+            if (isDark) {
+              container.classList.add('dark');
+            } else {
+              container.classList.remove('dark');
+            }
+          });
+        }
+      });
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    // Inicjalizacja przy ładowaniu strony z małym opóźnieniem
+    setTimeout(() => {
+      syncDarkMode();
+    }, 100);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      observer.disconnect();
+    };
+  }, []);
+
   return (
     <Router>
       <div className="relative min-h-screen">

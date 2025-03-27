@@ -196,31 +196,31 @@ const ReservationCalendar: React.FC = () => {
     const days = Math.ceil((new Date(reservation.end_date).getTime() - new Date(reservation.start_date).getTime()) / (1000 * 60 * 60 * 24));
     
     if (days >= 4) {
-      return `${baseStyle} bg-gradient-to-r from-indigo-100 to-blue-50 hover:from-indigo-200 hover:to-blue-100 text-center font-medium`;
+      return `${baseStyle} bg-gradient-to-r from-indigo-100 to-blue-50 dark:from-indigo-800 dark:to-blue-900 hover:from-indigo-200 hover:to-blue-100 dark:hover:from-indigo-700 dark:hover:to-blue-800 text-center font-medium dark:text-gray-100`;
     }
     
     if (days >= 2) {
-      return `${baseStyle} bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 text-center font-medium`;
+      return `${baseStyle} bg-gradient-to-r from-blue-100 to-blue-50 dark:from-blue-800 dark:to-blue-900 hover:from-blue-200 hover:to-blue-100 dark:hover:from-blue-700 dark:hover:to-blue-800 text-center font-medium dark:text-gray-100`;
     }
     
-    return `${baseStyle} bg-blue-50 hover:bg-blue-100 font-medium text-center`;
+    return `${baseStyle} bg-blue-50 dark:bg-blue-900 hover:bg-blue-100 dark:hover:bg-blue-800 font-medium text-center dark:text-gray-100`;
   };
 
   const renderHeader = () => {
     const days = Array.from({ length: getDaysInMonth() }, (_, i) => i + 1);
     
     return (
-      <div className="grid grid-cols-[200px_1fr] border-b">
-        <div className="p-4 font-medium text-gray-700 border-r">Nazwa sprzętu</div>
+      <div className="grid grid-cols-[200px_1fr] border-b dark:border-gray-700">
+        <div className="p-4 font-medium text-gray-700 dark:text-gray-300 border-r dark:border-gray-700">Nazwa sprzętu</div>
         <div className="overflow-x-auto">
           <div className="grid grid-cols-31 min-w-[1240px]">
             {days.map(day => {
               const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
               const dayName = DAYS[date.getDay() === 0 ? 6 : date.getDay() - 1];
               return (
-                <div key={day} className="p-2 text-center border-r last:border-r-0">
-                  <div className="font-bold text-lg">{day}</div>
-                  <div className="text-sm text-gray-500">{dayName}</div>
+                <div key={day} className="p-2 text-center border-r dark:border-gray-700 last:border-r-0">
+                  <div className="font-bold text-lg dark:text-white">{day}</div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">{dayName}</div>
                 </div>
               );
             })}
@@ -243,28 +243,28 @@ const ReservationCalendar: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <div className="p-4 border-b flex items-center justify-between">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div className="p-4 border-b dark:border-gray-700 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))}
-            className="p-3 md:p-2 hover:bg-gray-100 rounded-full touch-manipulation"
+            className="p-3 md:p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full touch-manipulation"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5 dark:text-gray-300" />
           </button>
-          <h2 className="text-lg md:text-xl font-semibold">
+          <h2 className="text-lg md:text-xl font-semibold dark:text-white">
             {currentDate.toLocaleString('pl-PL', { month: 'long', year: 'numeric' })}
           </h2>
           <button
             onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))}
-            className="p-3 md:p-2 hover:bg-gray-100 rounded-full touch-manipulation"
+            className="p-3 md:p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full touch-manipulation"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-5 h-5 dark:text-gray-300" />
           </button>
         </div>
         <button
           onClick={() => {/* TODO: Implement export */}}
-          className="hidden md:flex items-center px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+          className="hidden md:flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 dark:text-gray-300"
         >
           <Download className="w-5 h-5 mr-2" />
           Eksportuj
@@ -274,16 +274,16 @@ const ReservationCalendar: React.FC = () => {
       {loading ? (
         <div className="p-8 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-solrent-orange mx-auto"></div>
-          <p className="mt-4 text-gray-500">Ładowanie kalendarza...</p>
+          <p className="mt-4 text-gray-500 dark:text-gray-400">Ładowanie kalendarza...</p>
         </div>
       ) : (
         <div className="overflow-x-auto relative touch-pan-x">
           {renderHeader()}
           <div className="grid grid-cols-[120px_1fr] md:grid-cols-[200px_1fr] relative">
-            <div className="border-r">
+            <div className="border-r dark:border-gray-700">
               {equipment.map(item => (
-                <div key={item.id} className="p-2 md:p-4 border-b last:border-b-0 h-[60px] flex items-center">
-                  <div className="text-xs md:text-base line-clamp-2 break-words min-w-[100px] md:min-w-[180px] max-w-full">
+                <div key={item.id} className="p-2 md:p-4 border-b dark:border-gray-700 last:border-b-0 h-[60px] flex items-center">
+                  <div className="text-xs md:text-base line-clamp-2 break-words min-w-[100px] md:min-w-[180px] max-w-full dark:text-gray-300">
                     {item.name}
                   </div>
                 </div>
