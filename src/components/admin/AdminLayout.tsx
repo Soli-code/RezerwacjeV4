@@ -87,7 +87,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ onLogout }) => {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Nagłówek */}
-      <header className={`bg-white shadow fixed top-0 right-0 left-0 z-30 transition-all duration-300 ${!isMobile && !isCollapsed ? 'ml-64' : 'ml-0'}`}>
+      <header className={`bg-white shadow fixed top-0 right-0 left-0 z-30 transition-all duration-300 ${!isMobile ? (isCollapsed ? 'ml-16' : 'ml-64') : 'ml-0'}`}>
         <div className="flex justify-between items-center h-[73px] px-4">
           {isMobile && (
             <button

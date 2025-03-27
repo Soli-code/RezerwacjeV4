@@ -164,7 +164,7 @@ const ContactButton: React.FC = () => {
 
       {/* Desktop Version */}
       {!isMobile && !isModalOpen && (
-        <div className="fixed bottom-20 right-5 z-50">
+        <div className="fixed bottom-20 right-5 z-50 md:bottom-32">
           <AnimatePresence>
             {isExpanded ? (
               <motion.div

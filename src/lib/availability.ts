@@ -50,24 +50,32 @@ export const calculateRentalDays = (
   startTime: string | null = null,
   endTime: string | null = null
 ): number => {
-  if (!startDate || !endDate) {
+  if (!startDate || !endDate || !startTime || !endTime) {
     return 0;
   }
   
-  // Kopiujemy daty, aby nie modyfikować oryginalnych
+  // Tworzymy pełne daty z czasem
   const start = new Date(startDate);
   const end = new Date(endDate);
   
-  // Ustawiamy godziny na 0, aby liczyć pełne dni
-  start.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
+  // Dodajemy godziny
+  const [startHour, startMinute] = startTime.split(':').map(Number);
+  const [endHour, endMinute] = endTime.split(':').map(Number);
   
-  // Obliczamy różnicę w milisekundach i konwertujemy na dni
-  const diffTime = Math.abs(end.getTime() - start.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  start.setHours(startHour, startMinute, 0, 0);
+  end.setHours(endHour, endMinute, 0, 0);
   
-  // Dodajemy 1, aby uwzględnić dzień odbioru
-  return diffDays + 1;
+  // Obliczamy różnicę w godzinach
+  const diffHours = Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60);
+  
+  // Jeśli różnica jest większa niż 24 godziny, zaokrąglamy w górę do pełnych dni
+  // Jeśli różnica jest mniejsza lub równa 24 godzinom, to jest to 1 dzień
+  if (diffHours <= 24) {
+    return 1;
+  } else {
+    // Dla różnicy większej niż 24h, każde rozpoczęte 24h to nowy dzień
+    return Math.ceil((diffHours - 24) / 24) + 1;
+  }
 };
 
 /**

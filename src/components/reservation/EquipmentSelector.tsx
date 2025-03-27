@@ -434,7 +434,7 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
           return (
             <div 
               key={item.id} 
-              className={`border rounded-lg overflow-hidden flex min-h-[12rem] transition-all duration-200 cursor-pointer w-full ${
+              className={`border rounded-lg overflow-hidden flex min-h-[12rem] ${
                 isSelected ? 'bg-[#e6f3ff] border-[#0066cc] border-2' : 'bg-white'
               }`}
               onClick={() => setSelectedModalItem(item)}
@@ -446,13 +446,13 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
                   className="w-full h-full object-contain"
                 />
               </div>
-              <div className="w-2/3 p-3 flex flex-col justify-between">
+              <div className="flex-1 p-4 flex flex-col justify-between">
                 <div className="space-y-2">
                   <h3 className="font-medium text-gray-900 text-sm">{item.name}</h3>
                   <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
                   <div>
                     {item.deposit > 0 && (
-                    <p className="text-sm text-orange-600">Kaucja: {item.deposit} zł</p>
+                      <p className="text-sm text-orange-600">Kaucja: {item.deposit} zł</p>
                     )}
                     <button
                       onClick={(e) => {
@@ -467,41 +467,46 @@ const EquipmentSelector = ({ selectedEquipment, onChange, onNext }) => {
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="font-bold text-solrent-orange">
-                    <span>{item.price} zł/dzień</span>
-                    {item.promotional_price && (
-                      <span className="block text-sm text-green-600">
-                        od 7 dni: {item.promotional_price} zł/dzień
-                      </span>
-                    )}
-                  </span>
-                  <div className="flex items-center space-x-2" onClick={e => e.stopPropagation()}>
-                    {currentQuantity > 0 && (
-                      <>
-                        <button
-                          onClick={() => handleQuantityChange(item, currentQuantity - 1)}
-                          className="p-1 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
-                        >
-                          <Minus className="w-4 h-4" />
-                        </button>
-                        <span className="w-6 text-center font-medium">
-                          {currentQuantity}
+                
+                <div className="relative">
+                  <div className="absolute right-0 top-0">
+                    <div className="flex items-center space-x-1" onClick={e => e.stopPropagation()}>
+                      {currentQuantity > 0 && (
+                        <>
+                          <button
+                            onClick={() => handleQuantityChange(item, currentQuantity - 1)}
+                            className="p-1 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="w-4 text-center text-xs font-medium">
+                            {currentQuantity}
+                          </span>
+                        </>
+                      )}
+                      <button
+                        onClick={() => handleQuantityChange(item, currentQuantity + 1)}
+                        disabled={currentQuantity >= item.quantity}
+                        className={`p-1 rounded-full transition-colors ${
+                          currentQuantity >= item.quantity
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-orange-100 text-solrent-orange hover:bg-orange-200'
+                        }`}
+                        title={item.quantity > 1 ? `Dostępne: ${item.quantity} szt.` : ''}
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-start flex-nowrap">
+                    <span className="font-bold text-solrent-orange whitespace-nowrap min-w-[120px]">
+                      <span className="block">{item.price} zł/dzień</span>
+                      {item.promotional_price && (
+                        <span className="block text-sm text-green-600 whitespace-nowrap">
+                          od 7 dni: {item.promotional_price} zł/dzień
                         </span>
-                      </>
-                    )}
-                    <button
-                      onClick={() => handleQuantityChange(item, currentQuantity + 1)}
-                      disabled={currentQuantity >= item.quantity}
-                      className={`p-1 rounded-full transition-all ${
-                        currentQuantity >= item.quantity
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-orange-100 text-solrent-orange hover:bg-orange-200'
-                      }`}
-                      title={item.quantity > 1 ? `Dostępne: ${item.quantity} szt.` : ''}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                      )}
+                    </span>
                   </div>
                 </div>
               </div>

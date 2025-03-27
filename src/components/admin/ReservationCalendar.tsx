@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
+import NewCustomerDetailsView from '../customer/NewCustomerDetailsView';
 
 interface Equipment {
   id: string;
@@ -20,6 +21,14 @@ interface Reservation {
   start_time: string;
   end_time: string;
   status: string;
+  reservation_items: Array<{
+    equipment_id: string;
+  }>;
+}
+
+interface SelectedCell {
+  date: Date;
+  equipment: Equipment;
 }
 
 const DAYS = ['PON', 'WT', 'ŚR', 'CZW', 'PT', 'SOB', 'NIEDZ'];
@@ -30,6 +39,9 @@ const ReservationCalendar: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [hoveredCell, setHoveredCell] = useState<{ equipmentId: string; day: number } | null>(null);
+  const [showReservationForm, setShowReservationForm] = useState(false);
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
 
   useEffect(() => {
     loadEquipment();
@@ -80,7 +92,22 @@ const ReservationCalendar: React.FC = () => {
       return;
     }
 
-    setReservations(data || []);
+    // Mapowanie danych z Supabase na interfejs Reservation
+    const mappedReservations: Reservation[] = (data || []).map((item: any) => ({
+      id: item.id,
+      customer: {
+        first_name: item.customer?.first_name || '',
+        last_name: item.customer?.last_name || ''
+      },
+      start_date: item.start_date,
+      end_date: item.end_date,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      status: item.status,
+      reservation_items: item.reservation_items || []
+    }));
+
+    setReservations(mappedReservations);
     setLoading(false);
   };
 
@@ -203,6 +230,18 @@ const ReservationCalendar: React.FC = () => {
     );
   };
 
+  const handleCellClick = (equipmentId: string, day: number) => {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    const selectedEquipment = equipment.find(e => e.id === equipmentId);
+    if (selectedEquipment) {
+      navigate(`/admin/panel/reservations/new?date=${date.toISOString()}&equipmentId=${selectedEquipment.id}`);
+    }
+  };
+
+  const handleReservationSuccess = () => {
+    loadReservations();
+  };
+
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="p-4 border-b flex items-center justify-between">
@@ -282,7 +321,7 @@ const ReservationCalendar: React.FC = () => {
                               style={{ gridColumn: `span ${span}` }}
                             >
                               <div
-                                onClick={() => navigate(`/admin/panel/customer/${reservation.id}`)}
+                                onClick={() => navigate(`/admin/panel/reservations/${reservation.id}`)}
                                 className={`${getReservationStyle(reservation, isMultiDay)} min-h-[44px] touch-manipulation`}
                               >
                                 <div className="text-[10px] md:text-xs whitespace-pre-line font-medium">
@@ -305,7 +344,23 @@ const ReservationCalendar: React.FC = () => {
                         return null; // Nie renderuj komórki jeśli jest częścią połączonej rezerwacji
                       }
 
-                      return <div key={dayIndex} className="border-r last:border-r-0 h-[60px]" />;
+                      return (
+                        <div
+                          key={dayIndex} 
+                          className="border-r last:border-r-0 h-[60px] relative group"
+                          onMouseEnter={() => setHoveredCell({equipmentId: item.id, day: dayIndex + 1})}
+                          onMouseLeave={() => setHoveredCell(null)}
+                          onClick={() => handleCellClick(item.id, dayIndex + 1)}
+                        >
+                          {hoveredCell?.equipmentId === item.id && hoveredCell?.day === dayIndex + 1 && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-50/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                              <div className="w-8 h-8 rounded-full bg-solrent-orange text-white flex items-center justify-center text-xl font-bold shadow-lg transform group-hover:scale-110 transition-transform">
+                                +
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
                     })}
                   </div>
                 ))}
@@ -313,6 +368,16 @@ const ReservationCalendar: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showReservationForm && selectedCell && (
+        <NewCustomerDetailsView
+          isOpen={showReservationForm}
+          onClose={() => setShowReservationForm(false)}
+          selectedDate={selectedCell.date}
+          selectedEquipment={selectedCell.equipment}
+          onSuccess={handleReservationSuccess}
+        />
       )}
     </div>
   );

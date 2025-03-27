@@ -110,11 +110,13 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
         const unavailableDatesMap = new Map<string, string>();
         
+        // Sprawdzamy każdy dzień w miesiącu
         for (let d = new Date(startOfMonth); d <= endOfMonth; d.setDate(d.getDate() + 1)) {
           const dateKey = d.toISOString().split('T')[0];
           const testDate = new Date(d);
           testDate.setHours(0, 0, 0, 0);
 
+          // Sprawdzamy każdy element sprzętu
           for (const item of selectedEquipment) {
             const itemReservations = reservationsMap.get(item.id) || [];
             const isReserved = itemReservations.some(reservation => {
@@ -400,24 +402,30 @@ const DatePicker: React.FC<DatePickerProps> = ({
   const isDateDisabled = (date: Date | null) => {
     if (!date) return true;
     
-    const testDate = new Date(date);
-    testDate.setHours(0, 0, 0, 0);
-    
-    // Sprawdź czy to sobota po godzinie 13:00
-    if (testDate < today || date.getDay() === 0 || isSaturdayAfterCutoff(date)) return true;
-    
-    if (selectionStep === 2 && startDate) {
-      const startDateCopy = new Date(startDate);
-      startDateCopy.setHours(0, 0, 0, 0);
+    // Sprawdź czy data jest w przeszłości
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (date < today) return true;
+
+    // Sprawdź czy data jest zarezerwowana
+    const dateKey = date.toISOString().split('T')[0];
+    if (unavailableDates.has(dateKey)) return true;
+
+    // Jeśli wybrano datę początkową, sprawdź czy można wybrać datę końcową
+    if (startDate && selectionStep === 2) {
+      // Nie pozwól wybrać daty wcześniejszej niż data początkowa
+      if (date < startDate) return true;
       
-      // Blokuj daty wcześniejsze niż data rozpoczęcia
-      if (testDate < startDateCopy) {
-        return true;
+      // Sprawdź wszystkie daty między datą początkową a potencjalną datą końcową
+      const checkDate = new Date(startDate);
+      while (checkDate <= date) {
+        const checkDateKey = checkDate.toISOString().split('T')[0];
+        if (unavailableDates.has(checkDateKey)) return true;
+        checkDate.setDate(checkDate.getDate() + 1);
       }
     }
-    
-    const dateKey = testDate.toISOString().split('T')[0];
-    return unavailableDates.has(dateKey);
+
+    return false;
   };
 
   const formatDate = (date: Date | null) => {

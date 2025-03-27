@@ -96,13 +96,18 @@ const Pipeline: React.FC = () => {
           reservations: []
         },
         {
-          id: 'in_progress',
-          title: 'W trakcie',
+          id: 'picked_up',
+          title: 'Odebrane',
           reservations: []
         },
         {
           id: 'completed',
           title: 'Zakończone',
+          reservations: []
+        },
+        {
+          id: 'archived',
+          title: 'Historyczne',
           reservations: []
         },
         {
@@ -116,11 +121,20 @@ const Pipeline: React.FC = () => {
         // Próba pobrania danych przez RPC
         const { data, error } = await supabase.rpc('get_admin_pipeline_data', {
           p_date_range: '30days',
-          p_status: ['pending', 'confirmed', 'completed', 'in_progress', 'cancelled']
+          p_status: ['pending', 'confirmed', 'picked_up', 'completed', 'archived', 'cancelled']
         });
         
         if (!error && data && data.columns) {
-          setColumns(data.columns);
+          console.log('Dane z RPC:', data.columns);
+          // Zachowaj domyślne tytuły kolumn, aktualizuj tylko rezerwacje
+          const updatedColumns = defaultColumns.map(defaultColumn => {
+            const matchingColumn = data.columns.find((c: any) => c.id === defaultColumn.id);
+            return {
+              ...defaultColumn,
+              reservations: matchingColumn?.reservations || []
+            };
+          });
+          setColumns(updatedColumns);
           setLoading(false);
           return;
         }
@@ -164,6 +178,7 @@ const Pipeline: React.FC = () => {
       }
       
       if (reservationsData) {
+        console.log('Dane z fallbacku:', reservationsData);
         // Przekształcenie danych rezerwacji do wymaganego formatu
         const newColumns = [...defaultColumns];
         
@@ -201,6 +216,7 @@ const Pipeline: React.FC = () => {
           }
         });
         
+        console.log('Przekształcone kolumny:', newColumns);
         setColumns(newColumns);
       } else {
         // Brak danych, ustaw puste kolumny
@@ -222,13 +238,18 @@ const Pipeline: React.FC = () => {
           reservations: []
         },
         {
-          id: 'in_progress',
-          title: 'W trakcie',
+          id: 'picked_up',
+          title: 'Odebrane',
           reservations: []
         },
         {
           id: 'completed',
           title: 'Zakończone',
+          reservations: []
+        },
+        {
+          id: 'archived',
+          title: 'Historyczne',
           reservations: []
         },
         {
@@ -443,9 +464,20 @@ const Pipeline: React.FC = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleStatusChange(reservation.id, 'completed');
+                                  handleStatusChange(reservation.id, 'picked_up');
                                 }}
                                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                            )}
+                            {column.id === 'picked_up' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusChange(reservation.id, 'completed');
+                                }}
+                                className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-full"
                               >
                                 <CheckCircle className="w-4 h-4" />
                               </button>

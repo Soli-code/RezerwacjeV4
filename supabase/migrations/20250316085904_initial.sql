@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   start_time text NOT NULL,
   end_time text NOT NULL,
   total_price numeric NOT NULL,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled', 'completed')),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'picked_up', 'completed', 'archived', 'cancelled')),
   comment text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),

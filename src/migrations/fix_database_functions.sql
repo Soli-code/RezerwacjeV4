@@ -112,4 +112,109 @@ CREATE POLICY "Administratorzy mają pełny dostęp do sprzętu"
 ON equipment FOR ALL
 TO authenticated
 USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true))
-WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true)); 
+WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND is_admin = true));
+
+-- Funkcja do pobierania danych dla pipeline
+CREATE OR REPLACE FUNCTION public.get_admin_pipeline_data(p_date_range text, p_status text[])
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  result jsonb;
+  start_date timestamp;
+  end_date timestamp;
+BEGIN
+  -- Ustaw daty na podstawie parametru p_date_range
+  CASE p_date_range
+    WHEN '7days' THEN
+      start_date := NOW() - INTERVAL '7 days';
+      end_date := NOW();
+    WHEN '30days' THEN
+      start_date := NOW() - INTERVAL '30 days';
+      end_date := NOW();
+    WHEN '90days' THEN
+      start_date := NOW() - INTERVAL '90 days';
+      end_date := NOW();
+    ELSE
+      start_date := NOW() - INTERVAL '30 days';
+      end_date := NOW();
+  END CASE;
+
+  -- Pobierz dane rezerwacji
+  WITH reservation_data AS (
+    SELECT 
+      r.id,
+      r.status,
+      r.start_date,
+      r.end_date,
+      r.total_price,
+      jsonb_build_object(
+        'id', c.id,
+        'first_name', c.first_name,
+        'last_name', c.last_name,
+        'email', c.email,
+        'phone', c.phone,
+        'company_name', c.company_name,
+        'company_nip', c.company_nip
+      ) as customer,
+      jsonb_agg(
+        jsonb_build_object(
+          'id', ri.id,
+          'equipment_name', e.name,
+          'quantity', ri.quantity
+        )
+      ) as items
+    FROM reservations r
+    LEFT JOIN customers c ON r.customer_id = c.id
+    LEFT JOIN reservation_items ri ON r.id = ri.reservation_id
+    LEFT JOIN equipment e ON ri.equipment_id = e.id
+    WHERE r.start_date >= start_date
+    AND r.start_date <= end_date
+    AND r.status = ANY(p_status)
+    GROUP BY r.id, c.id
+  )
+  SELECT jsonb_build_object(
+    'columns', jsonb_agg(
+      jsonb_build_object(
+        'id', status,
+        'title', 
+          CASE status
+            WHEN 'pending' THEN 'Oczekujące'
+            WHEN 'confirmed' THEN 'Potwierdzone'
+            WHEN 'picked_up' THEN 'Odebrane'
+            WHEN 'completed' THEN 'Zakończone'
+            WHEN 'archived' THEN 'Historyczne'
+            WHEN 'cancelled' THEN 'Anulowane'
+            ELSE status
+          END,
+        'reservations', jsonb_agg(
+          jsonb_build_object(
+            'id', id,
+            'customer', customer,
+            'dates', jsonb_build_object(
+              'start', start_date::text,
+              'end', end_date::text
+            ),
+            'total_price', total_price,
+            'items', items
+          )
+        )
+      )
+    )
+  ) INTO result
+  FROM reservation_data
+  GROUP BY status;
+
+  -- Dodaj logowanie
+  RAISE LOG 'Pipeline data query parameters: date_range=%, status=%', p_date_range, p_status;
+  RAISE LOG 'Pipeline data result: %', result;
+
+  RETURN result;
+EXCEPTION
+  WHEN others THEN
+    RAISE LOG 'Error in get_admin_pipeline_data: %', SQLERRM;
+    RAISE;
+END;
+$$; 

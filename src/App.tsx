@@ -18,6 +18,7 @@ import CustomerDetailsView from './components/customer/CustomerDetailsView';
 import CustomerProfile from './components/customer/CustomerProfile';
 import EquipmentStats from './components/admin/EquipmentStats';
 import EquipmentDetails from './components/admin/EquipmentDetails';
+import NewCustomerDetailsView from './components/customer/NewCustomerDetailsView';
 
 // Komponent do obsługi przekierowań
 const RedirectToHome = () => {
@@ -40,6 +41,7 @@ function App() {
             <Route path="dashboard" element={<BusinessDashboard />} />
             <Route path="reservations" element={<Pipeline />} />
             <Route path="reservations/:id" element={<CustomerDetailsView />} />
+            <Route path="reservations/new" element={<NewCustomerDetailsView />} />
             <Route path="crm" element={<CRMDashboard />} />
             <Route path="equipment" element={<AdminProducts />} />
             <Route path="equipment-stats" element={<EquipmentStats />} />

@@ -46,59 +46,74 @@ export async function sendTemplateEmail({
 // Szablony emaili
 export const emailTemplates = {
   newReservation: {
-    subject: 'Potwierdzenie rezerwacji sprzętu',
-    htmlContent: `<h1>Potwierdzenie rezerwacji</h1>
-      <p>Szanowny/a {{first_name}} {{last_name}},</p>
-      <p>Dziękujemy za dokonanie rezerwacji w SOLRENT. Poniżej znajdują się szczegóły Twojej rezerwacji:</p>
-      <p>Data rozpoczęcia: {{start_date}} {{start_time}}<br>
-      Data zakończenia: {{end_date}} {{end_time}}<br>
-      Liczba dni: {{days}}</p>
-      <p>Wybrany sprzęt:<br>{{equipment}}</p>
-      <p>Całkowity koszt wypożyczenia: {{total_price}} zł<br>
-      Wymagana kaucja: {{deposit}} zł</p>
-      <p>Prosimy o przygotowanie:<br>
-      - Dokumentu tożsamości<br>
-      - Kaucji w wysokości {{deposit}} zł</p>
-      <p>Przypominamy o godzinach otwarcia:<br>
-      Poniedziałek - Piątek: 8:00 - 16:00<br>
-      Sobota: 8:00 - 13:00<br>
-      Niedziela: nieczynne</p>
-      <p>W razie pytań prosimy o kontakt:<br>
-      Tel: 694 171 171<br>
-      Email: biuro@solrent.pl</p>
-      <p>Pozdrawiamy,<br>
-      Zespół SOLRENT</p>`
+    subject: 'Potwierdzenie nowej rezerwacji',
+    htmlContent: `
+      <h2>Dziękujemy za rezerwację!</h2>
+      <p>Witaj {{first_name}},</p>
+      <p>Twoja rezerwacja została przyjęta i oczekuje na potwierdzenie.</p>
+      <h3>Szczegóły rezerwacji:</h3>
+      <ul>
+        <li>Data rozpoczęcia: {{start_date}} {{start_time}}</li>
+        <li>Data zakończenia: {{end_date}} {{end_time}}</li>
+        <li>Liczba dni: {{days}}</li>
+        <li>Sprzęt: {{equipment}}</li>
+        <li>Całkowita cena: {{total_price}} zł</li>
+        <li>Kaucja: {{deposit}} zł</li>
+      </ul>
+      <p>Skontaktujemy się z Tobą wkrótce w celu potwierdzenia rezerwacji.</p>
+    `
   },
   statusUpdate: {
     subject: 'Aktualizacja statusu rezerwacji',
-    htmlContent: `<h1>Aktualizacja statusu rezerwacji</h1>
-      <p>Szanowny/a {{first_name}} {{last_name}},</p>
-      <p>Informujemy, że status Twojej rezerwacji został zmieniony na: <strong>{{status}}</strong></p>
-      <p>Szczegóły rezerwacji:</p>
-      <p>Data rozpoczęcia: {{start_date}} {{start_time}}<br>
-      Data zakończenia: {{end_date}} {{end_time}}<br>
-      Liczba dni: {{days}}</p>
-      <p>Wybrany sprzęt:<br>{{equipment}}</p>
-      <p>W razie pytań prosimy o kontakt:<br>
-      Tel: 694 171 171<br>
-      Email: biuro@solrent.pl</p>
-      <p>Pozdrawiamy,<br>
-      Zespół SOLRENT</p>`
+    htmlContent: `
+      <h2>Aktualizacja statusu rezerwacji</h2>
+      <p>Witaj {{first_name}},</p>
+      <p>Status Twojej rezerwacji został zaktualizowany na: <strong>{{status}}</strong></p>
+      <h3>Szczegóły rezerwacji:</h3>
+      <ul>
+        <li>Data rozpoczęcia: {{start_date}} {{start_time}}</li>
+        <li>Data zakończenia: {{end_date}} {{end_time}}</li>
+        <li>Liczba dni: {{days}}</li>
+        <li>Sprzęt: {{equipment}}</li>
+        <li>Całkowita cena: {{total_price}} zł</li>
+        <li>Kaucja: {{deposit}} zł</li>
+      </ul>
+    `
   },
   cancelReservation: {
     subject: 'Anulowanie rezerwacji',
-    htmlContent: `<h1>Anulowanie rezerwacji</h1>
-      <p>Szanowny/a {{first_name}} {{last_name}},</p>
-      <p>Informujemy, że Twoja rezerwacja została anulowana.</p>
-      <p>Szczegóły anulowanej rezerwacji:</p>
-      <p>Data rozpoczęcia: {{start_date}} {{start_time}}<br>
-      Data zakończenia: {{end_date}} {{end_time}}<br>
-      Liczba dni: {{days}}</p>
-      <p>Wybrany sprzęt:<br>{{equipment}}</p>
-      <p>Jeśli masz jakiekolwiek pytania, prosimy o kontakt:<br>
-      Tel: 694 171 171<br>
-      Email: biuro@solrent.pl</p>
-      <p>Pozdrawiamy,<br>
-      Zespół SOLRENT</p>`
+    htmlContent: `
+      <h2>Anulowanie rezerwacji</h2>
+      <p>Witaj {{first_name}},</p>
+      <p>Twoja rezerwacja została anulowana.</p>
+      <h3>Szczegóły anulowanej rezerwacji:</h3>
+      <ul>
+        <li>Data rozpoczęcia: {{start_date}} {{start_time}}</li>
+        <li>Data zakończenia: {{end_date}} {{end_time}}</li>
+        <li>Liczba dni: {{days}}</li>
+        <li>Sprzęt: {{equipment}}</li>
+        <li>Całkowita cena: {{total_price}} zł</li>
+        <li>Kaucja: {{deposit}} zł</li>
+      </ul>
+      <p>Jeśli masz pytania, prosimy o kontakt.</p>
+    `
+  },
+  thankYou: {
+    subject: 'Dziękujemy za skorzystanie z naszych usług',
+    htmlContent: `
+      <h2>Dziękujemy za skorzystanie z naszych usług!</h2>
+      <p>Witaj {{first_name}},</p>
+      <p>Dziękujemy za skorzystanie z naszych usług. Mamy nadzieję, że wszystko spełniło Twoje oczekiwania.</p>
+      <h3>Szczegóły zakończonej rezerwacji:</h3>
+      <ul>
+        <li>Data rozpoczęcia: {{start_date}} {{start_time}}</li>
+        <li>Data zakończenia: {{end_date}} {{end_time}}</li>
+        <li>Liczba dni: {{days}}</li>
+        <li>Sprzęt: {{equipment}}</li>
+        <li>Całkowita cena: {{total_price}} zł</li>
+        <li>Kaucja: {{deposit}} zł</li>
+      </ul>
+      <p>Zapraszamy ponownie!</p>
+    `
   }
 }; 

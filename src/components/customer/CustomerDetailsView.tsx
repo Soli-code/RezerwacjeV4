@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { getAvailableHours, isValidTimeForDate } from '../../lib/availability';
 import { 
   User, Calendar, Package, CheckCircle, XCircle, 
   Clock, MessageSquare, History, ArrowLeft, AlertTriangle,
@@ -102,17 +103,17 @@ interface CustomerDetails {
 }
 
 interface CustomerUpdateData {
-  id?: string; // Dodajemy opcjonalne pole id
+  id?: string;
   first_name: string;
   last_name: string;
   email: string;
   phone: string;
-  company_name?: string;
-  company_nip?: string;
-  street?: string;
-  city?: string;
-  postal_code?: string;
-  notes?: string; // Dodajemy opcjonalne pole notatek
+  company_name: string;
+  company_nip: string;
+  street: string;
+  city: string;
+  postal_code: string;
+  notes?: string;
 }
 
 // Aktualizacja interfejsu dla editedDetails
@@ -268,7 +269,12 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     first_name: '',
     last_name: '',
     email: '',
-    phone: ''
+    phone: '',
+    company_name: '',
+    company_nip: '',
+    street: '',
+    city: '',
+    postal_code: ''
   });
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
 
@@ -332,6 +338,18 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     price: number;
   }>>([]);
 
+  const [originalCustomerData, setOriginalCustomerData] = useState<CustomerUpdateData>({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    company_name: '',
+    company_nip: '',
+    street: '',
+    city: '',
+    postal_code: ''
+  });
+
   useEffect(() => {
     loadCustomerDetails();
     loadComments();
@@ -381,23 +399,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
 
   useEffect(() => {
     if (details) {
-      // Format dates for input fields
-      const startDate = new Date(details.start_date);
-      const endDate = new Date(details.end_date);
-      
-      setEditedDetails({
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        start_time: startDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        end_time: endDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        status: details.status
-      });
-      
-      // Sprawdzamy, czy klient ma dane firmowe
-      setIsCompanyCustomer(!!details.customer.company_name);
-      
-      // Set customer details
-      setEditedCustomer({
+      const customerData = {
         id: details.customer.id,
         first_name: details.customer.first_name,
         last_name: details.customer.last_name,
@@ -407,9 +409,13 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         company_nip: details.customer.company_nip || '',
         street: details.customer.street || '',
         city: details.customer.city || '',
-        postal_code: details.customer.postal_code || '',
-        notes: editedCustomer.notes
-      });
+        postal_code: details.customer.postal_code || ''
+      };
+      
+      // Zapisz oryginalne dane
+      setOriginalCustomerData(customerData);
+      // Ustaw dane do edycji
+      setEditedCustomer(customerData);
     }
   }, [details]);
 
@@ -616,9 +622,33 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }
     
     try {
+      // Pobierz aktualny rok
+      const currentYear = new Date().getFullYear();
+      
+      // Pobierz ostatniego klienta z tego roku
+      const { data: lastCustomer, error: countError } = await supabase
+        .from('customers')
+        .select('id')
+        .like('id', `${currentYear}%`)
+        .order('id', { ascending: false })
+        .limit(1);
+
+      if (countError) throw countError;
+
+      // Generuj nowe ID
+      let newId;
+      if (lastCustomer && lastCustomer.length > 0) {
+        const lastNumber = parseInt(lastCustomer[0].id.substring(4));
+        newId = `${currentYear}${lastNumber + 1}`;
+      } else {
+        newId = `${currentYear}1`;
+      }
+
+      // Dodaj nowego klienta z wygenerowanym ID
       const { data, error } = await supabase
         .from('customers')
         .insert({
+          id: newId,
           first_name: editedCustomer.first_name,
           last_name: editedCustomer.last_name,
           email: editedCustomer.email,
@@ -677,6 +707,21 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
 
       if (!error && data) {
         setDetails(data);
+        // Aktualizuj również stan editedCustomer
+        const customerData = {
+          id: data.customer.id,
+          first_name: data.customer.first_name,
+          last_name: data.customer.last_name,
+          email: data.customer.email,
+          phone: data.customer.phone,
+          company_name: data.customer.company_name || '',
+          company_nip: data.customer.company_nip || '',
+          street: data.customer.street || '',
+          city: data.customer.city || '',
+          postal_code: data.customer.postal_code || ''
+        };
+        setEditedCustomer(customerData);
+        setOriginalCustomerData(customerData);
         setLoading(false);
         return;
       }
@@ -760,7 +805,6 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 deposit: item.equipment?.deposit || 0
               }))
             : [],
-          // Puste wartości dla pól, które normalnie pochodziłyby z widoku
           history: [],
           reservation: {
             id: resData.id,
@@ -772,6 +816,23 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
         };
 
         setDetails(formattedDetails);
+        
+        // Aktualizuj również stan editedCustomer
+        const updatedCustomer = {
+          id: customerData.id || '',
+          first_name: customerData.first_name || '',
+          last_name: customerData.last_name || '',
+          email: customerData.email || '',
+          phone: customerData.phone || '',
+          company_name: customerData.company_name || '',
+          company_nip: customerData.company_nip || '',
+          street: customerData.street || '',
+          city: customerData.city || '',
+          postal_code: customerData.postal_code || ''
+        };
+        
+        setEditedCustomer(updatedCustomer);
+        setOriginalCustomerData(updatedCustomer);
       }
     } catch (err) {
       console.error('Error loading customer details:', err);
@@ -876,428 +937,126 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     return end > start;
   };
 
+  const handleNipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Usuń wszystkie znaki niebędące cyframi
+    const numbersOnly = e.target.value.replace(/[^0-9]/g, '');
+    
+    // Ogranicz do 10 cyfr
+    const truncated = numbersOnly.slice(0, 10);
+    
+    // Dodaj myślniki w odpowiednich miejscach (XXX-XXX-XX-XX)
+    let formattedNip = truncated;
+    if (truncated.length > 3) {
+      formattedNip = truncated.slice(0, 3) + '-' + truncated.slice(3);
+    }
+    if (truncated.length > 6) {
+      formattedNip = formattedNip.slice(0, 7) + '-' + formattedNip.slice(7);
+    }
+    if (truncated.length > 8) {
+      formattedNip = formattedNip.slice(0, 10) + '-' + formattedNip.slice(10);
+    }
+    
+    setEditedCustomer({...editedCustomer, company_nip: formattedNip});
+  };
+
   const handleSaveChanges = async () => {
-    if (!details) {
+    if (!editMode) {
       return;
     }
-    
-    // Sprawdź połączenie z Supabase
-    const isConnected = await checkSupabaseConnection();
-    if (!isConnected) {
-      alert('Brak połączenia z bazą danych. Sprawdź połączenie internetowe i spróbuj ponownie.');
-      return;
-    }
-    
-    // Jeśli tryb edycji nie jest włączony, ale są usługi dodatkowe do zapisania,
-    // zapisz tylko usługi dodatkowe bez sprawdzania innych danych
-    if (!editMode && hasAdditionalServicesToSave()) {
-      setSubmitting(true);
-      
-      try {
-        // Najpierw sprawdź, czy tabela istnieje
-        const { data: tableCheck, error: tableError } = await supabase
-          .from('reservation_additional_services')
-          .select('id')
-          .limit(1);
-        
-        if (tableError) {
-          console.error('Tabela usług dodatkowych nie istnieje:', tableError);
-          alert('Nie można zapisać usług dodatkowych, ponieważ tabela w bazie danych nie istnieje. Skontaktuj się z administratorem.');
-          setSubmitting(false);
-      return;
-    }
-    
-        let hasErrors = false;
-        
-        // KROK 1: Aktualizacja usług dodatkowych
-        const servicesToSave = additionalServices.filter(service => service.quantity > 0);
-        
-        // Pobierz istniejące usługi
-        const { data: existingServices, error: getServicesError } = await supabase
-          .from('reservation_additional_services')
-          .select('*')
-          .eq('reservation_id', id);
-          
-        if (getServicesError) {
-          console.error('Błąd pobierania usług dodatkowych:', getServicesError);
-          hasErrors = true;
-        } else {
-          // Usuń wszystkie istniejące usługi, które nie są na liście do zapisania lub mają ilość 0
-          if (existingServices && existingServices.length > 0) {
-            // Usuwanie usług, które nie są w bieżącym zestawie do zapisania
-            const servicesToKeepIds = servicesToSave.map(s => s.id);
-            const servicesToRemove = existingServices.filter(service => 
-              !servicesToKeepIds.includes(service.service_id)
-            );
-            
-            if (servicesToRemove.length > 0) {
-              console.log('Usuwanie usług:', servicesToRemove.map(s => s.service_id));
-              const { error: deleteError } = await supabase
-                .from('reservation_additional_services')
-                .delete()
-                .in('id', servicesToRemove.map(service => service.id));
-                
-              if (deleteError) {
-                console.error('Błąd usuwania nieużywanych usług:', deleteError);
-                hasErrors = true;
-              }
-            }
-          }
-          
-          // Dla każdej usługi z dodatnią ilością
-          for (const service of servicesToSave) {
-            // Sprawdź czy usługa już istnieje
-            const existingService = existingServices?.find(s => s.service_id === service.id);
-            
-            if (existingService) {
-              // Aktualizuj istniejącą usługę
-              const { error: updateServiceError } = await supabase
-                .from('reservation_additional_services')
-                .update({
-                  quantity: service.quantity,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', existingService.id);
-              
-              if (updateServiceError) {
-                console.error('Błąd aktualizacji usługi dodatkowej:', updateServiceError);
-                hasErrors = true;
-              }
-            } else {
-              // Dodaj nową usługę
-              const { error: insertServiceError } = await supabase
-                .from('reservation_additional_services')
-                .insert({
-                  reservation_id: id,
-                  service_id: service.id,
-                  quantity: service.quantity,
-                  price: service.price,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                });
-              
-              if (insertServiceError) {
-                console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
-                hasErrors = true;
-              }
-            }
-          }
-        }
-        
-        // Odśwież dane
-        await loadCustomerDetails();
-        await loadAdditionalServices();
-        
-        if (!hasErrors) {
-          alert('Usługi dodatkowe zostały zapisane.');
-        } else {
-          alert('Wystąpiły problemy podczas zapisywania usług dodatkowych. Sprawdź logi w konsoli.');
-        }
-      } catch (error) {
-        console.error('Nieoczekiwany błąd podczas zapisywania usług dodatkowych:', error);
-        alert('Wystąpił nieoczekiwany błąd podczas zapisywania usług dodatkowych.');
-      } finally {
-        setSubmitting(false);
-      }
-      
-      return;
-    }
-    
-    // Kontynuuj normalne zapisywanie, jeśli tryb edycji jest włączony
-    // Walidacja godzin
-    if (!validateTimes(
-      editedDetails.start_date,
-      editedDetails.end_date,
-      editedDetails.start_time,
-      editedDetails.end_time
-    )) {
-      alert('Nieprawidłowe daty lub godziny. Sprawdź czy godziny są w zakresie 8:00-16:00 dla dni roboczych lub 8:00-13:00 dla sobót.');
-      return;
-    }
-    
+
     setSubmitting(true);
     let hasErrors = false;
-    
+
     try {
-      // Sprawdź, czy id rezerwacji jest poprawne
-      if (!id) {
-        alert('Brak identyfikatora rezerwacji');
-        return;
-      }
-      
-      console.log('Zapisywanie rezerwacji ID:', id);
-      
-      // Sprawdź, czy dane klienta są poprawne
-      if (!editedCustomer.id) {
-        alert('Brak wybranego klienta. Proszę wybrać klienta przed zapisem.');
-        console.log('Brak ID klienta:', editedCustomer);
-        return;
-      }
-      
-      // Format dates with time
-      const startDateTime = new Date(`${editedDetails.start_date}T${editedDetails.start_time}`);
-      const endDateTime = new Date(`${editedDetails.end_date}T${editedDetails.end_time}`);
-      
-      // Sprawdź, czy daty są poprawne
-      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-        alert('Nieprawidłowy format daty lub godziny');
-        console.error('Nieprawidłowe daty:', editedDetails);
-        return;
-      }
-      
-      // KROK 1: Aktualizacja danych rezerwacji
-      try {
-        const { error: reservationError } = await supabase
-            .from('reservations')
-            .update({
-              start_date: editedDetails.start_date,
-              end_date: editedDetails.end_date,
-              start_time: editedDetails.start_time,
-              end_time: editedDetails.end_time,
-            status: editedDetails.status || (details ? details.status : 'pending'),
-            updated_at: new Date().toISOString()
-            })
-            .eq('id', id);
+      // Aktualizacja danych klienta
+      if (editedCustomer.id) {
+        console.log('Zapisywanie danych klienta:', editedCustomer);
         
-        if (reservationError) {
-          console.error('Błąd aktualizacji rezerwacji:', reservationError);
-          alert(`Nie udało się zaktualizować rezerwacji: ${reservationError.message}`);
-          hasErrors = true;
-        } else {
-          console.log('Rezerwacja zaktualizowana pomyślnie');
-        }
-      } catch (reservationError) {
-        console.error('Wyjątek podczas aktualizacji rezerwacji:', reservationError);
-        hasErrors = true;
-      }
-      
-      // KROK 2: Aktualizacja danych klienta
-      try {
-        const { error: customerError } = await supabase
-          .from('customers')
-          .update({
+        // Przygotuj dane do aktualizacji
+        const updateData = {
             first_name: editedCustomer.first_name,
             last_name: editedCustomer.last_name,
             email: editedCustomer.email,
-            phone: editedCustomer.phone,
-            company_name: editedCustomer.company_name || null,
-            company_nip: editedCustomer.company_nip || null,
-            street: editedCustomer.street || null,
-            city: editedCustomer.city || null,
-            postal_code: editedCustomer.postal_code || null,
-            updated_at: new Date().toISOString()
+          phone: editedCustomer.phone,
+          company_name: editedCustomer.company_name || '',
+          company_nip: editedCustomer.company_nip ? editedCustomer.company_nip.replace(/[^0-9]/g, '') : '',
+          street: editedCustomer.street || '',
+          city: editedCustomer.city || '',
+          postal_code: editedCustomer.postal_code || ''
+        };
+
+        // Sprawdź, czy NIP jest podany i czy ma 10 cyfr
+        if (updateData.company_nip && updateData.company_nip.length !== 10) {
+          alert('Nieprawidłowy format NIP. NIP powinien składać się z 10 cyfr.');
+          setSubmitting(false);
+          return;
+        }
+
+        const { error: customerError } = await supabase
+                .from('customers')
+          .update({
+            ...updateData,
+            company_name: isCompanyCustomer ? updateData.company_name : null,
+            company_nip: isCompanyCustomer ? updateData.company_nip : null,
+            street: isCompanyCustomer ? updateData.street : null,
+            city: isCompanyCustomer ? updateData.city : null,
+            postal_code: isCompanyCustomer ? updateData.postal_code : null
           })
-            .eq('id', editedCustomer.id);
-            
+                .eq('id', editedCustomer.id);
+                
         if (customerError) {
           console.error('Błąd aktualizacji klienta:', customerError);
-            hasErrors = true;
+          if (customerError.code === '23514' && customerError.message.includes('valid_nip_format')) {
+            alert('Nieprawidłowy format NIP. NIP powinien składać się z 10 cyfr.');
           } else {
-          console.log('Dane klienta zaktualizowane pomyślnie');
-        }
-      } catch (customerError) {
-        console.error('Wyjątek podczas aktualizacji klienta:', customerError);
-        hasErrors = true;
-      }
-      
-      // KROK 3: Aktualizacja elementów rezerwacji (sprzęt)
-      if (editedEquipment.length > 0) {
-        // Najpierw pobierz istniejące elementy
-        const { data: existingItems, error: getItemsError } = await supabase
-          .from('reservation_items')
-          .select('id, equipment_id')
-          .eq('reservation_id', id);
-        
-        if (getItemsError) {
-          console.error('Błąd pobierania elementów rezerwacji:', getItemsError);
-          hasErrors = true;
-        } else {
-          // Usuń elementy, które nie są już na liście
-          const existingIds = new Set(existingItems.map(item => item.equipment_id));
-          const newIds = new Set(editedEquipment.map(item => item.id));
-          
-          // Elementy do usunięcia
-          const itemsToRemove = existingItems.filter(item => !newIds.has(item.equipment_id));
-          
-          if (itemsToRemove.length > 0) {
-            const { error: deleteItemsError } = await supabase
-              .from('reservation_items')
-              .delete()
-              .in('id', itemsToRemove.map(item => item.id));
-            
-            if (deleteItemsError) {
-              console.error('Błąd usuwania elementów rezerwacji:', deleteItemsError);
-              hasErrors = true;
-            }
+            alert('Wystąpił błąd podczas aktualizacji danych klienta');
           }
-          
-          // Dodaj nowe elementy lub zaktualizuj istniejące
-          for (const equipment of editedEquipment) {
-            if (existingIds.has(equipment.id)) {
-              // Zaktualizuj istniejący element
-              const existingItem = existingItems.find(item => item.equipment_id === equipment.id);
-              
-              if (existingItem) {
-                const { error: updateItemError } = await supabase
-                  .from('reservation_items')
-                  .update({
-                    quantity: equipment.quantity,
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', existingItem.id);
-                
-                if (updateItemError) {
-                  console.error('Błąd aktualizacji elementu rezerwacji:', updateItemError);
-                  hasErrors = true;
-                }
-              } else {
-                console.warn(`Nie znaleziono elementu rezerwacji dla sprzętu ${equipment.id}, tworzę nowy`);
-                // Jeśli element nie został znaleziony, dodajemy go jako nowy
-                const { error: insertItemError } = await supabase
-                  .from('reservation_items')
-                  .insert({
-                    reservation_id: id,
-                    equipment_id: equipment.id,
-                    quantity: equipment.quantity,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  });
-                
-                if (insertItemError) {
-                  console.error('Błąd dodawania elementu rezerwacji:', insertItemError);
-                  hasErrors = true;
-                }
-              }
-            } else {
-              // Dodaj nowy element
-              const { error: insertItemError } = await supabase
-                .from('reservation_items')
-                .insert({
-                  reservation_id: id,
-                  equipment_id: equipment.id,
-                  quantity: equipment.quantity,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                });
-              
-              if (insertItemError) {
-                console.error('Błąd dodawania elementu rezerwacji:', insertItemError);
-          hasErrors = true;
-              }
-            }
-          }
-        }
-      }
-      
-      // KROK 4: Aktualizacja usług dodatkowych
-      const servicesToSave = additionalServices.filter(service => service.quantity > 0);
-      
-      if (servicesToSave.length > 0) {
-        // Najpierw pobierz istniejące usługi
-        const { data: existingServices, error: getServicesError } = await supabase
-            .from('reservation_additional_services')
-          .select('id, service_id')
-          .eq('reservation_id', id);
-        
-        if (getServicesError) {
-          console.error('Błąd pobierania usług dodatkowych:', getServicesError);
           hasErrors = true;
           } else {
-          // Usuń usługi, które nie są już na liście lub mają ilość 0
-          const existingServiceIds = existingServices ? new Set(existingServices.map(s => s.service_id)) : new Set();
-          const newServiceIds = new Set(servicesToSave.map(s => s.id));
+          console.log('Dane klienta zostały zaktualizowane pomyślnie');
           
-          // Usługi do usunięcia
-          if (existingServices && existingServices.length > 0) {
-            const servicesToRemove = existingServices.filter(service => !newServiceIds.has(service.service_id));
-            
-            if (servicesToRemove.length > 0) {
-              const { error: deleteServicesError } = await supabase
-                  .from('reservation_additional_services')
-                .delete()
-                .in('id', servicesToRemove.map(service => service.id));
-              
-              if (deleteServicesError) {
-                console.error('Błąd usuwania usług dodatkowych:', deleteServicesError);
-                hasErrors = true;
-              }
-            }
-          }
+          // Aktualizuj stan komponentu bezpośrednio
+          const formattedNip = updateData.company_nip ? 
+            `${updateData.company_nip.slice(0,3)}-${updateData.company_nip.slice(3,6)}-${updateData.company_nip.slice(6,8)}-${updateData.company_nip.slice(8,10)}` 
+            : '';
+
+          const updatedCustomer = {
+            ...editedCustomer,
+            company_name: isCompanyCustomer ? updateData.company_name : '',
+            company_nip: isCompanyCustomer ? formattedNip : '',
+            street: isCompanyCustomer ? updateData.street : '',
+            city: isCompanyCustomer ? updateData.city : '',
+            postal_code: isCompanyCustomer ? updateData.postal_code : ''
+          };
           
-          // Dodaj nowe usługi lub zaktualizuj istniejące
-          for (const service of servicesToSave) {
-            if (existingServiceIds.has(service.id)) {
-              // Zaktualizuj istniejącą usługę
-              const existingService = existingServices?.find(s => s.service_id === service.id);
-                
-                if (existingService) {
-                const { error: updateServiceError } = await supabase
-                    .from('reservation_additional_services')
-                  .update({
-                    quantity: service.quantity,
-                    updated_at: new Date().toISOString()
-                  })
-                    .eq('id', existingService.id);
-                    
-                if (updateServiceError) {
-                  console.error('Błąd aktualizacji usługi dodatkowej:', updateServiceError);
-                  hasErrors = true;
-                  }
-                } else {
-                console.warn(`Nie znaleziono usługi dodatkowej dla ID ${service.id}, tworzę nową`);
-                // Jeśli usługa nie została znaleziona, dodajemy ją jako nową
-                const { error: insertServiceError } = await supabase
-                    .from('reservation_additional_services')
-                    .insert({
-                      reservation_id: id,
-                      service_id: service.id,
-                      quantity: service.quantity,
-                    price: service.price,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  });
-                
-                if (insertServiceError) {
-                  console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
-                  hasErrors = true;
-                }
+          setEditedCustomer(updatedCustomer);
+          setOriginalCustomerData(updatedCustomer);
+          
+          // Aktualizuj details
+          if (details) {
+            setDetails({
+              ...details,
+              customer: {
+                ...details.customer,
+                ...updatedCustomer
               }
-            } else {
-              // Dodaj nową usługę
-              const { error: insertServiceError } = await supabase
-                .from('reservation_additional_services')
-                .insert({
-                  reservation_id: id,
-                  service_id: service.id,
-                  quantity: service.quantity,
-                  price: service.price,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                });
-              
-              if (insertServiceError) {
-                console.error('Błąd dodawania usługi dodatkowej:', insertServiceError);
-                hasErrors = true;
-              }
-            }
+            });
           }
         }
       }
-      
-      // Odśwież dane
-      await loadCustomerDetails();
-      await loadAdditionalServices();
-      
-      // Wyświetl komunikat o wyniku operacji
+
+      // Jeśli nie było błędów
       if (!hasErrors) {
-        alert('Zmiany zostały zapisane pomyślnie.');
-        setEditMode(false);
-      } else {
-        alert('Wystąpiły problemy podczas zapisywania zmian. Sprawdź logi w konsoli.');
+        // Wyłącz tryb edycji
+      setEditMode(false);
+      
+        // Pokaż komunikat o sukcesie
+        alert('Dane zostały pomyślnie zapisane');
       }
     } catch (error) {
-      console.error('Nieoczekiwany błąd podczas zapisywania zmian:', error);
-      alert('Wystąpił nieoczekiwany błąd podczas zapisywania zmian.');
+      console.error('Nieoczekiwany błąd:', error);
+      alert('Wystąpił nieoczekiwany błąd podczas zapisywania danych');
+      hasErrors = true;
     } finally {
       setSubmitting(false);
     }
@@ -1626,28 +1385,6 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     }));
   };
 
-  const handleNipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Usuń wszystkie znaki niebędące cyframi
-    const numbersOnly = e.target.value.replace(/[^0-9]/g, '');
-    
-    // Ogranicz do 10 cyfr
-    const truncated = numbersOnly.slice(0, 10);
-    
-    // Dodaj myślniki w odpowiednich miejscach (XXX-XXX-XX-XX)
-    let formattedNip = truncated;
-    if (truncated.length > 3) {
-      formattedNip = truncated.slice(0, 3) + '-' + truncated.slice(3);
-    }
-    if (truncated.length > 6) {
-      formattedNip = formattedNip.slice(0, 7) + '-' + formattedNip.slice(7);
-    }
-    if (truncated.length > 8) {
-      formattedNip = formattedNip.slice(0, 10) + '-' + formattedNip.slice(10);
-    }
-    
-    setEditedCustomer({...editedCustomer, company_nip: formattedNip});
-  };
-
   const handleDateClick = async (date: Date | null): Promise<void> => {
     // Implementacja funkcji
     console.log(date);
@@ -1688,6 +1425,40 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
     
     return hasServicesToAdd || hasServicesToRemove || hasServicesQuantityChanged || allZeroButHasSavedServices;
   };
+
+  // W komponencie, przed renderowaniem:
+  const getTimeOptions = (date: string, isStart: boolean = true) => {
+    const selectedDate = new Date(date);
+    return getAvailableHours(selectedDate, isStart).map(time => (
+      <option key={time} value={time}>{time}</option>
+    ));
+  };
+
+  // Funkcja do anulowania edycji
+  const handleCancelEdit = () => {
+    // Przywróć oryginalne dane
+    setEditedCustomer(originalCustomerData);
+    setEditMode(false);
+  };
+
+  // Dodajemy useEffect do obsługi kliknięcia w dokument
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const productSearch = document.getElementById('product_search');
+      const equipmentList = document.querySelector('.equipment-list');
+      
+      if (productSearch && equipmentList && 
+          !productSearch.contains(event.target as Node) && 
+          !equipmentList.contains(event.target as Node)) {
+        setShowEquipmentList(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -2102,7 +1873,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setEditMode(!editMode)}
+                  onClick={() => editMode ? handleCancelEdit() : setEditMode(true)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     editMode 
                       ? 'bg-gray-200 text-gray-700'
@@ -2141,10 +1912,11 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 </button>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
+              <div className="space-y-4">
+                {editMode && (
+                  <div className="mb-4">
                   <label htmlFor="customer_search" className="block text-sm font-medium text-gray-700 mb-1">
-                    Imię i nazwisko
+                      Wyszukaj klienta
                   </label>
                   <div className="relative">
                     <input
@@ -2154,9 +1926,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                       value={customerSearchTerm}
                       onChange={(e) => setCustomerSearchTerm(e.target.value)}
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                      disabled={!editMode}
                     />
-                    
                     {showCustomerSuggestions && customerSuggestions.length > 0 && (
                       <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {customerSuggestions.map(customer => (
@@ -2172,6 +1942,44 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                           </div>
                         ))}
                       </div>
+                    )}
+                  </div>
+                </div>
+                )}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="first_name" className="block text-sm font-medium text-gray-700 mb-1">
+                      Imię
+                  </label>
+                    {editMode ? (
+                  <input
+                        type="text"
+                        id="first_name"
+                        value={editedCustomer.first_name}
+                        onChange={(e) => setEditedCustomer({...editedCustomer, first_name: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                        disabled={submitting}
+                  />
+                    ) : (
+                      <p className="py-2">{editedCustomer.first_name}</p>
+                    )}
+                </div>
+                <div>
+                    <label htmlFor="last_name" className="block text-sm font-medium text-gray-700 mb-1">
+                      Nazwisko
+                  </label>
+                    {editMode ? (
+                  <input
+                    type="text"
+                        id="last_name"
+                        value={editedCustomer.last_name}
+                        onChange={(e) => setEditedCustomer({...editedCustomer, last_name: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                        disabled={submitting}
+                  />
+                    ) : (
+                      <p className="py-2">{editedCustomer.last_name}</p>
                     )}
                   </div>
                 </div>
@@ -2224,7 +2032,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     Dodatkowe dane klienta
                   </label>
                   <div className="grid grid-cols-1 gap-3">
-            {isCompanyCustomer && (
+                    {isCompanyCustomer ? (
               <>
                 <div>
                           <label htmlFor="customer_company_name" className="block text-xs text-gray-500 mb-1">
@@ -2233,7 +2041,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                   <input
                     type="text"
                     id="customer_company_name"
-                    value={editedCustomer.company_name}
+                            value={editedCustomer.company_name || ''}
                     onChange={(e) => setEditedCustomer({...editedCustomer, company_name: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
@@ -2247,7 +2055,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                   <input
                     type="text"
                     id="customer_company_nip"
-                    value={editedCustomer.company_nip}
+                            value={editedCustomer.company_nip || ''}
                     onChange={handleNipChange}
                     placeholder="XXX-XXX-XX-XX"
                     maxLength={13}
@@ -2255,73 +2063,61 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     disabled={!editMode}
                   />
                 </div>
-                      </>
-                    )}
+                
                 <div>
-                      <label htmlFor="customer_street" className="block text-xs text-gray-500 mb-1">
+                          <label htmlFor="customer_street" className="block text-xs text-gray-500 mb-1">
                     Ulica i numer
                   </label>
                   <input
                     type="text"
                     id="customer_street"
-                    value={editedCustomer.street}
+                            value={editedCustomer.street || ''}
                     onChange={(e) => setEditedCustomer({...editedCustomer, street: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
                   />
                 </div>
-                    <div className="grid grid-cols-2 gap-2">
+                
+                        <div className="grid grid-cols-2 gap-2">
                 <div>
-                        <label htmlFor="customer_postal_code" className="block text-xs text-gray-500 mb-1">
-                          Kod pocztowy
+                            <label htmlFor="customer_postal_code" className="block text-xs text-gray-500 mb-1">
+                              Kod pocztowy
                   </label>
                   <input
                     type="text"
-                          id="customer_postal_code"
-                          value={editedCustomer.postal_code}
-                          onChange={(e) => setEditedCustomer({...editedCustomer, postal_code: e.target.value})}
+                              id="customer_postal_code"
+                              value={editedCustomer.postal_code || ''}
+                              onChange={(e) => setEditedCustomer({...editedCustomer, postal_code: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
                   />
                 </div>
                 <div>
-                        <label htmlFor="customer_city" className="block text-xs text-gray-500 mb-1">
-                          Miasto
+                            <label htmlFor="customer_city" className="block text-xs text-gray-500 mb-1">
+                              Miasto
                   </label>
                   <input
                     type="text"
-                          id="customer_city"
-                          value={editedCustomer.city}
-                          onChange={(e) => setEditedCustomer({...editedCustomer, city: e.target.value})}
+                              id="customer_city"
+                              value={editedCustomer.city || ''}
+                              onChange={(e) => setEditedCustomer({...editedCustomer, city: e.target.value})}
                     className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                     disabled={!editMode}
                   />
+                          </div>
                 </div>
-                    </div>
-            <div>
-                      <label htmlFor="customer_notes" className="block text-xs text-gray-500 mb-1">
-                Notatki
-              </label>
-              <textarea
-                id="customer_notes"
-                rows={3}
-                placeholder="Dodatkowe informacje..."
-                value={editedCustomer.notes}
-                onChange={(e) => setEditedCustomer({...editedCustomer, notes: e.target.value})}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
-                disabled={!editMode}
-              />
-                    </div>
+              </>
+                    ) : null}
                   </div>
                 </div>
             </div>
             
               {/* Termin rezerwacji - prawa strona */}
-              <div>
+            <div>
                 <div className="mb-2">
                   <label className="block text-sm font-medium text-gray-700">
                     Termin rezerwacji
-                </label>
+              </label>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div>
@@ -2333,37 +2129,24 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                       id="start_date"
                       value={editedDetails.start_date}
                       onChange={(e) => setEditedDetails({...editedDetails, start_date: e.target.value})}
-                      className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                       disabled={submitting || !editMode}
-                    />
-                  </div>
-                  
+              />
+            </div>
+            
                   <div>
                     <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
                       <Clock3 className="w-4 h-4" /> Godzina rozpoczęcia
                 </label>
-                    <input
-                      type="time"
+                    <select
                       id="start_time"
                       value={editedDetails.start_time}
-                      onChange={(e) => {
-                        const time = e.target.value;
-                        const [hours] = time.split(':').map(Number);
-                        const selectedDate = new Date(editedDetails.start_date);
-                        const isSaturday = selectedDate.getDay() === 6;
-                        
-                        if (hours >= 8 && ((isSaturday && hours < 13) || (!isSaturday && hours < 16))) {
-                          setEditedDetails({...editedDetails, start_time: time});
-                        } else {
-                          alert('Godziny rozpoczęcia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
-                        }
-                      }}
-                      min="08:00"
-                      max={editedDetails.start_date && new Date(editedDetails.start_date).getDay() === 6 ? "13:00" : "16:00"}
-                      step="1800"
+                      onChange={(e) => setEditedDetails({...editedDetails, start_time: e.target.value})}
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                       disabled={submitting || !editMode}
-                    />
+                    >
+                      {getTimeOptions(editedDetails.start_date, true)}
+                    </select>
                   </div>
                   
                   <div>
@@ -2384,28 +2167,15 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                     <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
                       <Clock3 className="w-4 h-4" /> Godzina zakończenia
                 </label>
-                    <input
-                      type="time"
+                    <select
                       id="end_time"
                       value={editedDetails.end_time}
-                      onChange={(e) => {
-                        const time = e.target.value;
-                        const [hours] = time.split(':').map(Number);
-                        const selectedDate = new Date(editedDetails.end_date);
-                        const isSaturday = selectedDate.getDay() === 6;
-                        
-                        if (hours >= 8 && ((isSaturday && hours <= 13) || (!isSaturday && hours <= 16))) {
-                          setEditedDetails({...editedDetails, end_time: time});
-                        } else {
-                          alert('Godziny zakończenia muszą być między 8:00 a 16:00 w dni robocze lub 8:00 a 13:00 w soboty');
-                        }
-                      }}
-                      min="08:00"
-                      max={editedDetails.end_date && new Date(editedDetails.end_date).getDay() === 6 ? "13:00" : "16:00"}
-                      step="1800"
+                      onChange={(e) => setEditedDetails({...editedDetails, end_time: e.target.value})}
                       className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-solrent-orange"
                       disabled={submitting || !editMode}
-                    />
+                    >
+                      {getTimeOptions(editedDetails.end_date, false)}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -2429,7 +2199,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 
                 {showEquipmentList && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto equipment-list">
                     {availableEquipment
                       .filter(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))
                       .map(item => (
@@ -2534,9 +2304,7 @@ const CustomerDetailsView: React.FC = (): JSX.Element => {
               <div className="flex justify-end">
                 <button
                   onClick={handleSaveChanges}
-                  disabled={submitting || (!editMode && !hasAdditionalServicesToSave()) || 
-                    // W trybie edycji daty są wymagane, ale przy zapisywaniu tylko usług dodatkowych nie są potrzebne
-                    (editMode && (!editedDetails.start_date || !editedDetails.end_date))}
+                  disabled={submitting}
                   className="px-4 py-2 bg-solrent-orange text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting ? 'Zapisywanie...' : 'Zapisz zmiany'}

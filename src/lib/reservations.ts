@@ -3,11 +3,21 @@ import { sendTemplateEmail, emailTemplates } from './email-utils';
 
 export interface ReservationStatus {
   id: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  status: 'pending' | 'confirmed' | 'picked_up' | 'completed' | 'archived' | 'cancelled';
   customer_id: string;
   start_date: string;
   end_date: string;
   total_price: number;
+}
+
+interface ReservationItem {
+  equipment: {
+    name: string;
+    description: string;
+  };
+  quantity: number;
+  price_per_day: number;
+  deposit: number;
 }
 
 export const updateReservationStatus = async (
@@ -74,7 +84,7 @@ export const updateReservationStatus = async (
 
     // Przygotuj dane dla szablonu
     const equipmentText = reservation.items
-      .map(item => `${item.equipment.name} (${item.quantity} szt.) - ${item.price_per_day} zł/dzień`)
+      .map((item: ReservationItem) => `${item.equipment.name} (${item.quantity} szt.) - ${item.price_per_day} zł/dzień`)
       .join('\n');
 
     // Mapowanie statusów na przyjazne dla użytkownika nazwy
@@ -146,10 +156,14 @@ const getDefaultStatusComment = (status: ReservationStatus['status']): string =>
   switch (status) {
     case 'confirmed':
       return 'Rezerwacja potwierdzona';
-    case 'cancelled':
-      return 'Rezerwacja anulowana';
+    case 'picked_up':
+      return 'Sprzęt odebrany';
     case 'completed':
       return 'Rezerwacja zakończona';
+    case 'archived':
+      return 'Rezerwacja przeniesiona do historycznych';
+    case 'cancelled':
+      return 'Rezerwacja anulowana';
     default:
       return 'Status zmieniony';
   }
